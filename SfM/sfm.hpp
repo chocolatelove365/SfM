@@ -11,6 +11,6 @@
 
 #include <stdio.h>
 
-void SfM();
+void SfM(Eigen::Ref<const Eigen::MatrixXd> image0, Eigen::Ref<const Eigen::MatrixXd> image1, const int width, const int height, const double fov);
 
 #endif /* sfm_hpp */
