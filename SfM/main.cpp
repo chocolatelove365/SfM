@@ -7,55 +7,49 @@
 //
 
 #include <iostream>
-#include <Eigen/Core>
-#include <Eigen/SVD>
-#include "eight/fundamental.h"
-#include "eight/essential.h"
-#include "eight/triangulate.h"
-#include "eight/project.h"
+#include <GLUT/glut.h>
+#include "object.hpp"
+#include "sfm.hpp"
 
 using namespace std;
-using namespace Eigen;
 
-void SfM(){
-    const int width = 1920;
-    const int height = 1080;
-    const double foc = width / tan(4.375 / 90.0 * M_PI);
-    const int n_points = 8;
-    cout << "foc: 11" << foc << "\n";
-    
-    Eigen::Matrix3d K;
-    K <<
-    foc, 0.0, 0.5 *(width - 1),
-    0.0, foc, 0.5 *(height - 1),
-    0.0, 0.0, 1.0;
-    
-    Matrix<double, 2, n_points> imageL, imageR;
-    imageL <<
-    1465, 1378, 589, 471, 380, 467, 1215, 1326,
-    776, 836, 919, 878, 484, 428, 357, 399;
-    imageR <<
-    1400, 1288, 518, 434, 553, 659, 1392, 1477,
-    772, 817, 764, 707, 328, 289, 337, 392;
-    
-    Matrix3d F = eight::fundamentalMatrix(imageL, imageR);
-    cout << F << "\n";
-    Matrix3d E = eight::essentialMatrix(K, F);
-    Matrix<double, 3, 4> poseL, poseR;
-    poseL <<
-    1.0, 0.0, 0.0, 0.0,
-    0.0, 1.0, 0.0, 0.0,
-    0.0, 0.0, 1.0, 0.0;
-    poseR = eight::pose(E, K, imageL, imageR);
-    cout << "PoseL:\n" << poseL << "\n";
-    cout << "PoseR:\n" << poseR << "\n";
-    Matrix<double, 3, 4> P_L = eight::cameraMatrix(K, poseL);
-    Matrix<double, 3, 4> P_R = eight::cameraMatrix(K, poseR);
-    Vector3d X = eight::triangulate(P_L, P_R, imageL.col(7), imageR.col(7));
-    cout << "X:\n" << X << "\n";
+const int init_width = 960;
+const int init_height = 540;
+
+void init(){
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glViewport(0, 0, init_width, init_height);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    gluPerspective(10.0, (double)init_width/init_height, 0.1, 100.0);
 }
 
-int main(int argc, const char * argv[]) {
-    SfM();
+void draw() {
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+//    glutSolidTeapot(0.5);
+    points();
+    lines();
+    glutSwapBuffers();
+}
+
+void resize(int width, int height){
+    glViewport(0, 0, width, height);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    gluPerspective(10.0, (double)width/height, 0.1, 100.0);
+}
+
+int main(int argc, char * argv[]) {
+    glutInit(&argc, argv);
+    glutInitWindowSize(init_width, init_height);
+    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH);
+    glutCreateWindow("SfM");
+    glutReshapeFunc(resize);
+    glutDisplayFunc(draw);
+    init();
+    glutMainLoop();
+//    SfM();
     return 0;
 }
