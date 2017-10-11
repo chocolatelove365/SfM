@@ -19,8 +19,8 @@
 using namespace std;
 using namespace Eigen;
 
-void SfM(Eigen::Ref<const Eigen::MatrixXd> image0, Eigen::Ref<const Eigen::MatrixXd> image1, const int width, const int height, const double fov){
-    const double foc = width / tan(fov / 180.0 * M_PI);
+Eigen::Matrix<double, 3, Eigen::Dynamic> SfM(Eigen::Ref<const Eigen::MatrixXd> image0, Eigen::Ref<const Eigen::MatrixXd> image1, const int width, const int height, const double fov){
+    const double foc = height * 0.5 / tan(fov / 360.0 * M_PI);
     cout << "foc: " << foc << "\n";
     
     Eigen::Matrix3d K;
@@ -30,25 +30,21 @@ void SfM(Eigen::Ref<const Eigen::MatrixXd> image0, Eigen::Ref<const Eigen::Matri
     0.0, 0.0, 1.0;
     
     Matrix3d F = eight::fundamentalMatrix(image0, image1);
-    cout << F << "\n";
+    cout << "F:\n" << F << "\n";
     Matrix3d E = eight::essentialMatrix(K, F);
-//    Matrix<double, 3, 4> pose0, pose1;
-//    pose0 <<
-//    1.0, 0.0, 0.0, 0.0,
-//    0.0, 1.0, 0.0, 0.0,
-//    0.0, 0.0, 1.0, 0.0;
     Matrix<double, 3, 4> pose1 = eight::pose(E, K, image0, image1);
-//    cout << "distance: " << pose1.col(3).norm() << "\n";
-//    cout << "pose0:\n" << pose0 << "\n";
-//    cout << "pose1:\n" << pose1 << "\n";
-//    Matrix<double, 3, 4> P0 = eight::cameraMatrix(K, pose0);
-//    Matrix<double, 3, 4> P1 = eight::cameraMatrix(K, pose1);
-//    Vector3d X = eight::triangulate(P0, P1, image0.col(7), image1.col(7));
-//    cout << "X:\n" << X << "\n";
-    Eigen::Matrix<double, 3, Eigen::Dynamic > pointsTriangulated = eight::structureFromTwoViews(K, pose1, image0, image1);
-    double scale = 0.7 / (pointsTriangulated.col(0) - pointsTriangulated.col(1)).norm();
+    cout << "pose1:\n" << pose1 << "\n";
+    Matrix4d pose2;
+    pose2 << pose1, 0, 0, 0, 1;
+    cout << "pose2_inv:\n" << pose2.inverse() << "\n";
+    Eigen::Matrix<double, 3, Eigen::Dynamic> points3d = eight::structureFromTwoViews(K, pose1, image0, image1);
+    for(int i = 0; i < points3d.cols(); i++){
+        points3d(0, i) = -points3d(0, i);
+//        points3d(1, i) = -points3d(1, i);
+//        points3d(2, i) = -points3d(2, i);
+    }
+    double scale = 1.0 / (points3d.col(0) - points3d.col(1)).norm();
     cout << "scale: " << scale << "\n";
-    pointsTriangulated.array() *=  scale;
-    
-    cout << pointsTriangulated << "\n";
+    points3d.array() *=  scale;
+    return points3d;
 }

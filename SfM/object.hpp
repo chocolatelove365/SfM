@@ -10,8 +10,17 @@
 #define object_hpp
 
 #include <stdio.h>
+#include <OpenGL/OpenGL.h>
+#include <GLUT/GLUT.h>
+#include <Eigen/Core>
 
-void points();
-void lines();
-
+namespace obj {
+    
+    void point(GLfloat *vtx);
+    void points(GLdouble *vtx, int num);
+    void points(Eigen::Matrix<double, 3, Eigen::Dynamic> vtx);
+    void lines(GLdouble *vtx, int num);
+    void lines(Eigen::Matrix<double, 3, Eigen::Dynamic> vtx);
+    
+}
 #endif /* object_hpp */

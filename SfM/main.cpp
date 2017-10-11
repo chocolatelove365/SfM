@@ -13,7 +13,19 @@
 #include "object.hpp"
 #include "sfm.hpp"
 
+#define POINTS_8 0
+
 using namespace std;
+
+const double fov = 4.375;
+//const double fov = 6.0;
+const int width = 1920;
+const int height = 1080;
+#if POINTS_8
+const int n_points = 8;
+#else
+const int n_points = 22;
+#endif
 
 const int init_width = 960;
 const int init_height = 540;
@@ -21,10 +33,21 @@ const char *filename = "/Users/tomiya/Desktop/大相撲/video/1709_大相撲9月
 GLuint g_texID;
 cv::Mat img;
 
+Eigen::Vector3d origin;
+Eigen::Matrix<double, 3, 8> xyz_axis;
+Eigen::Matrix<double, 3, Eigen::Dynamic> points3d;
+
 void setupTexture(GLuint texID, const char *file)
 {
     img = cv::imread(file);
-    if(img.empty()) cout << "image is empty\n";
+    if(img.empty()){
+        cout << "image is empty\n";
+        return;
+    }
+    if(img.cols != width || img.rows != height){
+        cout << "the size of image is incorrect\n";
+        return;
+    }
     cv::cvtColor(img, img, CV_BGR2RGB);
     
     glBindTexture(GL_TEXTURE_2D, texID);
@@ -37,9 +60,6 @@ void setupTexture(GLuint texID, const char *file)
 
 void drawTexture()
 {
-    float width = img.cols;
-    float height = img.rows;
-    
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
     glOrtho(0, width, 0, height, -1.0, 1.0);
@@ -83,7 +103,7 @@ void init(){
     glViewport(0, 0, init_width, init_height);
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    gluPerspective(4.375, (double)init_width/init_height, 0.1, 100.0);
+    gluPerspective(fov, (double)init_width/init_height, 0.0001, 1000.0);
 }
 
 void draw() {
@@ -91,11 +111,11 @@ void draw() {
     drawTexture();
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    gluPerspective(4.375, (double)init_width/init_height, 0.1, 100.0);
+    gluPerspective(fov, (double)init_width/init_height, 0.0001, 1000.0);
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
-    points();
-    lines();
+    obj::lines(xyz_axis);
+    obj::points(points3d);
     glutSwapBuffers();
 }
 
@@ -103,22 +123,40 @@ void resize(int width, int height){
     glViewport(0, 0, width, height);
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    gluPerspective(4.375, (double)width/height, 0.1, 100.0);
+    gluPerspective(fov, (double)width/height, 0.0001, 1000.0);
 }
 
 int main(int argc, char * argv[]) {
-    const double fov = 4.375 * 2;
-    const int width = 1920;
-    const int height = 1080;
-    const int n_points = 8;
     Eigen::Matrix<double, 2, n_points> image0, image1;
+#if POINTS_8
     image0 <<
     1465, 1378, 589, 471, 380, 467, 1215, 1326,
     776, 836, 919, 878, 484, 428, 357, 399;
     image1 <<
     1400, 1288, 518, 434, 553, 659, 1392, 1477,
     772, 817, 764, 707, 328, 289, 337, 392;
-    SfM(image0, image1, width, height, fov);
+#else
+    image0 <<
+    1465, 1378, 589, 471, 380, 467, 1215, 1326, 929, 756, 897, 625, 985, 1190, 1127, 787, 512, 132, 1764, 1712,  773, 150,
+     776,  836, 919, 878, 484, 428,  357, 399,  712, 652, 556, 459, 468,  512,  191, 276, 472, 404,  504,  609, 1002, 757;
+    image1 <<
+    1400, 1288, 518, 434, 553, 659, 1392, 1477, 940, 812, 990, 613, 1019, 1198, 1465, 1038, 633, 394, 1843, 1734, 645, 213,
+     772,  817, 764, 707, 328, 289,  337,  392, 627, 542, 474, 329,  400,  475,  169,  194, 332, 218,  563,  655, 872, 544;
+#endif
+    points3d = SfM(image0, image1, width, height, fov);
+    cout << "points3d:\n" << points3d << "\n";
+    origin = Eigen::Vector3d::Zero();
+    for(int i = 0; i < 8; i++){
+        origin += points3d.col(i);
+    }
+    origin /= 8;
+    
+    cout << "origin:\n" << origin << "\n";
+    
+    xyz_axis <<
+    origin(0), (points3d(0, 0) + points3d(0, 1)) * 0.5, origin(0), (points3d(0, 2) + points3d(0, 3)) * 0.5, origin(0), (points3d(0, 4) + points3d(0, 5)) * 0.5, origin(0), (points3d(0, 6) + points3d(0, 7)) * 0.5,
+    origin(1), (points3d(1, 0) + points3d(1, 1)) * 0.5, origin(1), (points3d(1, 2) + points3d(1, 3)) * 0.5, origin(1), (points3d(1, 4) + points3d(1, 5)) * 0.5, origin(1), (points3d(1, 6) + points3d(1, 7)) * 0.5,
+    origin(2), (points3d(2, 0) + points3d(2, 1)) * 0.5, origin(2), (points3d(2, 2) + points3d(2, 3)) * 0.5, origin(2), (points3d(2, 4) + points3d(2, 5)) * 0.5, origin(2), (points3d(2, 6) + points3d(2, 7)) * 0.5;
     
     glutInit(&argc, argv);
     glutInitWindowSize(init_width, init_height);
