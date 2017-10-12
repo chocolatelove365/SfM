@@ -34,7 +34,7 @@ namespace obj {
         for(int i = 0; i < num; i++){
             glPushMatrix();
             glTranslated(vtx[i*3], vtx[i*3+1], vtx[i*3+2]);
-            glutSolidSphere(0.05,16,16);
+            glutSolidSphere(0.03,16,16);
             glPopMatrix();
         }
     }
@@ -49,7 +49,6 @@ namespace obj {
         glVertexPointer(3, GL_DOUBLE, 0, vtx);
         glLineWidth(2.0f);
         glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
-        
         glEnableClientState(GL_VERTEX_ARRAY);
         glDrawArrays(GL_LINES, 0, num);
         glDisableClientState(GL_VERTEX_ARRAY);
@@ -59,5 +58,20 @@ namespace obj {
         int num = (int)vtx.cols();
         Eigen::Map<Eigen::RowVectorXd> vec(vtx.data(), vtx.size());
         lines((GLdouble*)vec.data(), num);
+    }
+    
+    void line_loop(GLdouble *vtx, int num){
+        glVertexPointer(3, GL_DOUBLE, 0, vtx);
+        glLineWidth(2.0f);
+        glColor4f(1.0f, 0.0f, 0.0f, 1.0f);
+        glEnableClientState(GL_VERTEX_ARRAY);
+        glDrawArrays(GL_LINE_LOOP, 0, num);
+        glDisableClientState(GL_VERTEX_ARRAY);
+    }
+    
+    void line_loop(Eigen::Matrix<double, 3, Eigen::Dynamic> vtx){
+        int num = (int)vtx.cols();
+        Eigen::Map<Eigen::RowVectorXd> vec(vtx.data(), vtx.size());
+        line_loop((GLdouble*)vec.data(), num);
     }
 }

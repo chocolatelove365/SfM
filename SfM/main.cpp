@@ -7,36 +7,53 @@
 //
 
 #include <iostream>
+#include <string>
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 #include <GLUT/glut.h>
 #include <opencv2/opencv.hpp>
+#include "json.hpp"
 #include "object.hpp"
 #include "sfm.hpp"
 
-#define POINTS_8 0
-
+using json = nlohmann::json;
 using namespace std;
 
-//const double fov = 4.375;
-const double fov = 4.6;
-const int width = 1920;
-const int height = 1080;
-#if POINTS_8
-const int n_points = 8;
-#else
-const int n_points = 28;
-#endif
+std::string filename;
+int width, height;
+double fov;
+int n_points;
+Eigen::MatrixXd image0, image1;
 
 const int init_width = 960;
 const int init_height = 540;
-const char *filename = "/Users/tomiya/Desktop/大相撲/video/1709_大相撲9月場所/calib用/calib_image_L.png";
+
 GLuint g_texID;
 cv::Mat img;
 
 Eigen::Vector3d origin;
 Eigen::Vector3d x_axis, y_axis, z_axis;
+Eigen::Vector3d eye_pos;
 Eigen::Matrix<double, 3, Eigen::Dynamic> points3d, points3d_world;
+
+
+void load(){
+    std::ifstream input_json("/Users/tomiya/Desktop/SfM/SfM/image_data.json");
+    if(input_json.is_open()){
+        json json_obj;
+        input_json >> json_obj;
+        filename = json_obj["filename"];
+        width = json_obj["width"];
+        height = json_obj["height"];
+        fov = json_obj["fov"];
+        n_points = json_obj["n_points"];
+        std::vector<double> image0_vec = json_obj["image0"];
+        image0 = Eigen::Map<Eigen::MatrixXd>(image0_vec.data(), n_points, 2).transpose();
+        std::vector<double> image1_vec = json_obj["image1"];
+        image1 = Eigen::Map<Eigen::MatrixXd>(image1_vec.data(), n_points, 2).transpose();
+    }
+    else cout << "Could not open json file\n";
+}
 
 void setupTexture(GLuint texID, const char *file)
 {
@@ -69,9 +86,9 @@ void drawTexture()
     
     static const GLfloat vtx[] = {
         0.0, 0.0, 0.0,
-        width, 0.0, 0.0,
-        width, height, 0.0,
-        0.0, height, 0.0
+        (GLfloat)width, 0.0, 0.0,
+        (GLfloat)width, (GLfloat)height, 0.0,
+        0.0, (GLfloat)height, 0.0
     };
     glVertexPointer(3, GL_FLOAT, 0, vtx);
     
@@ -99,12 +116,13 @@ void drawTexture()
 
 void init(){
     glGenTextures(1, &g_texID);
-    setupTexture(g_texID, filename);
+    setupTexture(g_texID, filename.c_str());
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glViewport(0, 0, init_width, init_height);
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
     gluPerspective(fov, (double)init_width/init_height, 0.0001, 1000.0);
+    eye_pos << 50.0, 20.0, 0.0;
 }
 
 void draw() {
@@ -128,15 +146,43 @@ void draw_model(){
     gluPerspective(fov, (double)init_width/init_height, 0.0001, 1000.0);
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
-    gluLookAt(50.0, 20.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0);
-//    glTranslated(0.0, 0.0, 35.0);
+    gluLookAt(eye_pos(0), eye_pos(1), eye_pos(2), 0.0, 0.0, 0.0, 0.0, 0.0, 1.0);
     obj::points(points3d_world);
     obj::lines((Eigen::MatrixXd(3, 6) <<
                 0, 1, 0, 0, 0, 0,
                 0, 0, 0, 1, 0, 0,
                 0, 0, 0, 0, 0, 1).finished());
     obj::lines(points3d_world.leftCols(8));
+    obj::line_loop(points3d_world.leftCols(8));
     glutSwapBuffers();
+}
+
+void key(unsigned char key, int x, int y){
+    switch(key){
+    case 'a':
+        cout << "a key\n";
+    }
+}
+
+void special_key(int key, int x, int y){
+    switch(key){
+        case GLUT_KEY_LEFT:
+            eye_pos(0) += 2.0;
+            glutPostRedisplay();
+            break;
+        case GLUT_KEY_RIGHT:
+            eye_pos(0) -= 2.0;
+            glutPostRedisplay();
+            break;
+        case GLUT_KEY_UP:
+            eye_pos(2) += 2.0;
+            glutPostRedisplay();
+            break;
+        case GLUT_KEY_DOWN:
+            eye_pos(2) -= 2.0;
+            glutPostRedisplay();
+            break;
+    }
 }
 
 void resize(int width, int height){
@@ -147,24 +193,9 @@ void resize(int width, int height){
 }
 
 int main(int argc, char * argv[]) {
-    Eigen::Matrix<double, 2, n_points> image0, image1;
-#if POINTS_8
-    image0 <<
-    1465, 1378, 589, 471, 380, 467, 1215, 1326,
-    776, 836, 919, 878, 484, 428, 357, 399;
-    image1 <<
-    1400, 1288, 518, 434, 553, 659, 1392, 1477,
-    772, 817, 764, 707, 328, 289, 337, 392;
-#else
-    image0 <<
-    1465, 1378, 589, 471, 380, 467, 1215, 1326, 929, 756, 897, 625, 985, 1190, 1127, 787, 512, 132, 1764, 1712,  773, 150, 930, 859, 733, 1345, 1020, 773,
-     776,  836, 919, 878, 484, 428,  357, 399,  712, 652, 556, 459, 468,  512,  191, 276, 472, 404,  504,  609, 1002, 757, 114,202, 213, 978, 993, 1002;
-    image1 <<
-    1400, 1288, 518, 434, 553, 659, 1392, 1477, 940, 812, 990, 613, 1019, 1198, 1465, 1038, 633, 394, 1843, 1734, 645, 213, 1311, 1147, 1025, 1185, 995, 874,
-     772,  817, 764, 707, 328, 289,  337,  392, 627, 542, 474, 329,  400,  475,  169,  194, 332, 218,  563,  655, 872, 544, 68, 134, 127, 945, 912, 905;
-#endif
+    load();
+    
     points3d = SfM(image0, image1, width, height, fov);
-    cout << "points3d:\n" << points3d << "\n";
     origin = Eigen::Vector3d::Zero();
     for(int i = 0; i < 8; i++){
         origin += points3d.col(i);
@@ -176,7 +207,6 @@ int main(int argc, char * argv[]) {
     y_axis << ((points3d.col(2) + points3d.col(3)) * 0.5 - origin).normalized();
     z_axis = x_axis.cross(y_axis);
     cout << "dot: " << x_axis.dot(y_axis) << "\n";
-//    y_axis = z_axis.cross(x_axis);
     Eigen::Matrix4d Rt;
     Rt.block(0, 0, 3, 4) << x_axis, y_axis, z_axis, origin;
     Rt.row(3) << 0, 0, 0, 1;
@@ -208,6 +238,8 @@ int main(int argc, char * argv[]) {
     glutInitWindowPosition(init_width * 2, 100);
     glutCreateWindow("3D model");
     glutDisplayFunc(draw_model);
+    glutKeyboardFunc(key);
+    glutSpecialFunc(special_key);
     
     glutMainLoop();
     

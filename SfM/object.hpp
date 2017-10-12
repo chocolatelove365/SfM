@@ -21,6 +21,8 @@ namespace obj {
     void points(Eigen::Matrix<double, 3, Eigen::Dynamic> vtx);
     void lines(GLdouble *vtx, int num);
     void lines(Eigen::Matrix<double, 3, Eigen::Dynamic> vtx);
+    void line_loop(GLdouble *vtx, int num);
+    void line_loop(Eigen::Matrix<double, 3, Eigen::Dynamic> vtx);
     
 }
 #endif /* object_hpp */
