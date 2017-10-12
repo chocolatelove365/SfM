@@ -34,7 +34,7 @@ namespace obj {
         for(int i = 0; i < num; i++){
             glPushMatrix();
             glTranslated(vtx[i*3], vtx[i*3+1], vtx[i*3+2]);
-            glutSolidSphere(0.1,16,16);
+            glutSolidSphere(0.05,16,16);
             glPopMatrix();
         }
     }

@@ -34,16 +34,16 @@ Eigen::Matrix<double, 3, Eigen::Dynamic> SfM(Eigen::Ref<const Eigen::MatrixXd> i
     Matrix3d E = eight::essentialMatrix(K, F);
     Matrix<double, 3, 4> pose1 = eight::pose(E, K, image0, image1);
     cout << "pose1:\n" << pose1 << "\n";
-    Matrix4d pose2;
-    pose2 << pose1, 0, 0, 0, 1;
-    cout << "pose2_inv:\n" << pose2.inverse() << "\n";
+//    Matrix4d pose2;
+//    pose2 << pose1, 0, 0, 0, 1;
+//    cout << "pose2_inv:\n" << pose2.inverse() << "\n";
     Eigen::Matrix<double, 3, Eigen::Dynamic> points3d = eight::structureFromTwoViews(K, pose1, image0, image1);
     for(int i = 0; i < points3d.cols(); i++){
         points3d(0, i) = -points3d(0, i);
 //        points3d(1, i) = -points3d(1, i);
 //        points3d(2, i) = -points3d(2, i);
     }
-    double scale = 1.0 / (points3d.col(0) - points3d.col(1)).norm();
+    double scale = 200.0;
     cout << "scale: " << scale << "\n";
     points3d.array() *=  scale;
     return points3d;
