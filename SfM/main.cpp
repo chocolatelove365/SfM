@@ -21,7 +21,7 @@ using namespace std;
 
 std::string filename;
 int width, height;
-double fov;
+double fov0, fov1;
 int n_points;
 Eigen::MatrixXd image0, image1;
 
@@ -45,7 +45,8 @@ void load(){
         filename = json_obj["filename"];
         width = json_obj["width"];
         height = json_obj["height"];
-        fov = json_obj["fov"];
+        fov0 = json_obj["fov0"];
+        fov1 = json_obj["fov1"];
         n_points = json_obj["n_points"];
         std::vector<double> image0_vec = json_obj["image0"];
         image0 = Eigen::Map<Eigen::MatrixXd>(image0_vec.data(), n_points, 2).transpose();
@@ -121,7 +122,7 @@ void init(){
     glViewport(0, 0, init_width, init_height);
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    gluPerspective(fov, (double)init_width/init_height, 0.0001, 1000.0);
+    gluPerspective(fov0, (double)init_width/init_height, 0.0001, 1000.0);
     eye_pos << 50.0, 20.0, 0.0;
 }
 
@@ -130,7 +131,7 @@ void draw() {
     drawTexture();
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    gluPerspective(fov, (double)init_width/init_height, 0.0001, 1000.0);
+    gluPerspective(fov0, (double)init_width/init_height, 0.0001, 1000.0);
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
     obj::lines((Eigen::MatrixXd(3, 6) << origin, origin+x_axis, origin, origin+y_axis, origin, origin+z_axis).finished());
@@ -143,7 +144,7 @@ void draw_model(){
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    gluPerspective(fov, (double)init_width/init_height, 0.0001, 1000.0);
+    gluPerspective(fov0, (double)init_width/init_height, 0.0001, 1000.0);
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
     gluLookAt(eye_pos(0), eye_pos(1), eye_pos(2), 0.0, 0.0, 0.0, 0.0, 0.0, 1.0);
@@ -189,13 +190,13 @@ void resize(int width, int height){
     glViewport(0, 0, width, height);
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    gluPerspective(fov, (double)width/height, 0.0001, 1000.0);
+    gluPerspective(fov0, (double)width/height, 0.0001, 1000.0);
 }
 
 int main(int argc, char * argv[]) {
     load();
     
-    points3d = SfM(image0, image1, width, height, fov);
+    points3d = SfM(image0, image1, width, height, fov0, fov1);
     origin = Eigen::Vector3d::Zero();
     for(int i = 0; i < 8; i++){
         origin += points3d.col(i);

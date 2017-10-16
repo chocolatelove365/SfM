@@ -20,10 +20,6 @@ namespace eight {
         return k.transpose() * f * k;
     }
     
-    Eigen::Matrix3d essentialMatrix(const Eigen::Matrix3d &k0, const Eigen::Matrix3d &k1, const Eigen::Matrix3d &f) {
-        return k1.transpose() * f * k0;
-    }
-    
     Eigen::Matrix<double, 3, 4> pose(const Eigen::Matrix3d &e, const Eigen::Matrix3d &k, Eigen::Ref<const Eigen::MatrixXd> a, Eigen::Ref<const Eigen::MatrixXd> b) {
         
         Eigen::JacobiSVD<Eigen::Matrix3d> svd(e, Eigen::ComputeFullU | Eigen::ComputeFullV);

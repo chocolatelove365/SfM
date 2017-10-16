@@ -20,7 +20,7 @@ namespace eight {
         Essential matrix from camera instrinsics and fundamental matrix.
     */
     Eigen::Matrix3d essentialMatrix(const Eigen::Matrix3d &k, const Eigen::Matrix3d &f);
-    Eigen::Matrix3d essentialMatrix(const Eigen::Matrix3d &k0, const Eigen::Matrix3d &k1, const Eigen::Matrix3d &f);
+    
     
     /**
         Recover pose from essential matrix up to scale.
