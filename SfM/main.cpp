@@ -204,8 +204,12 @@ int main(int argc, char * argv[]) {
     origin /= 8;
     
     cout << "origin:\n" << origin << "\n";
-    x_axis << ((points3d.col(4) + points3d.col(5)) * 0.5 - origin).normalized();
-    y_axis << ((points3d.col(2) + points3d.col(3)) * 0.5 - origin).normalized();
+    x_axis << (points3d.col(4) + points3d.col(5)) * 0.5 - origin;
+    y_axis << (points3d.col(2) + points3d.col(3)) * 0.5 - origin;
+    cout << "x_axis norm :" << x_axis.norm() << "\n";
+    cout << "y_axis norm :" << y_axis.norm() << "\n";
+    x_axis = x_axis.normalized();
+    y_axis = y_axis.normalized();
     z_axis = x_axis.cross(y_axis);
     cout << "dot: " << x_axis.dot(y_axis) << "\n";
     Eigen::Matrix4d Rt;

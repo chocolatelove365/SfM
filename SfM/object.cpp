@@ -10,6 +10,19 @@
 
 namespace obj {
     
+    void draw_string(int x, int y, char *string, void *font)
+    {
+        int len, i;
+        
+        glRasterPos2f(x, y);
+        len = (int) strlen(string);
+        for (i = 0; i < len; i++)
+        {
+            glutBitmapCharacter(font, string[i]);
+        }
+        
+    }
+    
     void point(GLdouble *vtx){
         glVertexPointer(3, GL_DOUBLE, 0, vtx);
         glPointSize(4.0f);
@@ -34,7 +47,10 @@ namespace obj {
         for(int i = 0; i < num; i++){
             glPushMatrix();
             glTranslated(vtx[i*3], vtx[i*3+1], vtx[i*3+2]);
-            glutSolidSphere(0.03,16,16);
+            glutSolidSphere(0.000003,16,16);
+            char text[50];
+            sprintf(text, "%d", i);
+            draw_string(0, 0, text, GLUT_BITMAP_TIMES_ROMAN_24);
             glPopMatrix();
         }
     }

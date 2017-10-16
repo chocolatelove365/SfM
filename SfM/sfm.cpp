@@ -52,9 +52,9 @@ Eigen::Matrix<double, 3, Eigen::Dynamic> SfM(Eigen::Ref<const Eigen::MatrixXd> i
     
     
     for(int i = 0; i < points3d.cols(); i++){
-        points3d(0, i) = -points3d(0, i);
-//        points3d(1, i) = -points3d(1, i);
-//        points3d(2, i) = -points3d(2, i);
+//        points3d(0, i) = -points3d(0, i);
+        points3d(1, i) = -points3d(1, i);
+        points3d(2, i) = -points3d(2, i);
     }
     double scale = 200.0;
     cout << "scale: " << scale << "\n";
