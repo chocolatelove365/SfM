@@ -25,6 +25,7 @@ namespace obj {
     void line_loop(GLdouble *vtx, int num);
     void line_loop(Eigen::Matrix<double, 3, Eigen::Dynamic> vtx);
     void circle(double x, double y, double z, double radius, int sides);
+    void coordinate(Eigen::Matrix4d mat);
     
 }
 #endif /* object_hpp */

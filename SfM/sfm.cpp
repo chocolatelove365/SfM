@@ -41,8 +41,6 @@ Eigen::Matrix<double, 3, Eigen::Dynamic> SfM(Eigen::Ref<const Eigen::MatrixXd> i
     Matrix<double, 3, 4> pose1 = eight::pose(E, K0, image0, image1);
     
     Eigen::Matrix<double, 3, Eigen::Dynamic> points3d = eight::structureFromTwoViews(K0, pose1, image0, image1);
-    
-
     Eigen::Matrix<double, 3, 4> pose0;
     pose0 <<
     1, 0, 0, 0,
@@ -50,13 +48,11 @@ Eigen::Matrix<double, 3, Eigen::Dynamic> SfM(Eigen::Ref<const Eigen::MatrixXd> i
     0, 0, 1, 0;
 //    test(F, K0, K1, pose0, pose1, image0.col(0), image1.col(0));
     
-    
     for(int i = 0; i < points3d.cols(); i++){
-//        points3d(0, i) = -points3d(0, i);
-        points3d(1, i) = -points3d(1, i);
-        points3d(2, i) = -points3d(2, i);
+        points3d(0, i) = -points3d(0, i);
+//        points3d(1, i) = -points3d(1, i);
+//        points3d(2, i) = -points3d(2, i);
     }
-//    double scale = 150.0;
-//    points3d.array() *=  scale;
+    
     return points3d;
 }

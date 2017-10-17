@@ -100,4 +100,12 @@ namespace obj {
         }
         line_loop(vtx);
     }
+    
+    void coordinate(Eigen::Matrix4d mat){
+        Eigen::Vector3d x_axis = mat.block(0, 0, 3, 1);
+        Eigen::Vector3d y_axis = mat.block(0, 1, 3, 1);
+        Eigen::Vector3d z_axis = mat.block(0, 2, 3, 1);
+        Eigen::Vector3d origin = mat.block(0, 3, 3, 1);
+        lines((Eigen::MatrixXd(3, 6) << origin, origin+x_axis, origin, origin+y_axis, origin, origin+z_axis).finished());
+    }
 }

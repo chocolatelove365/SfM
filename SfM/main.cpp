@@ -35,7 +35,7 @@ Eigen::Vector3d origin;
 Eigen::Vector3d x_axis, y_axis, z_axis;
 Eigen::Vector3d eye_pos;
 Eigen::Matrix<double, 3, Eigen::Dynamic> points3d, points3d_world;
-
+Eigen::Matrix4d camera0;
 
 void load_json(){
     std::ifstream input_json("/Users/tomiya/Desktop/SfM/SfM/image_data.json");
@@ -66,47 +66,40 @@ void save_json(){
 }
 
 void calibration(){
-    double diff = DBL_MAX;
-    double x_axis_norm = DBL_MAX;
-    double y_axis_norm = DBL_MAX;
-    double dot = DBL_MAX;
-    for(double tmp_fov0 = 5.0; tmp_fov0 < 10.0; tmp_fov0 += 0.1){
-        for(double tmp_fov1 = 5.0; tmp_fov1 < 10.0; tmp_fov1 += 0.1){
-            points3d = SfM(image0, image1, width, height, tmp_fov0, tmp_fov1);
-            origin = Eigen::Vector3d::Zero();
+    double min_diff = DBL_MAX;
+    double min_dot = DBL_MAX;
+    double best_fov0 = 0.0;
+    double best_fov1 = 0.0;
+    
+    for(double _fov0 = 5.0; _fov0 < 10.0; _fov0 += 0.1){
+        for(double _fov1 = 5.0; _fov1 < 10.0; _fov1 += 0.1){
+            Eigen::Vector3d _origin, _x_axis, _y_axis, _z_axis;
+            Eigen::Matrix<double, 3, Eigen::Dynamic> _points3d;
+            _points3d = SfM(image0, image1, width, height, _fov0, _fov1);
+            _origin = Eigen::Vector3d::Zero();
             for(int i = 0; i < 8; i++){
-                origin += points3d.col(i);
+                _origin += _points3d.col(i);
             }
-            origin /= 8;
+            _origin /= 8;
+            _x_axis << (_points3d.col(4) + _points3d.col(5)) * 0.5 - _origin;
+            _y_axis << (_points3d.col(2) + _points3d.col(3)) * 0.5 - _origin;
             
-            x_axis << (points3d.col(4) + points3d.col(5)) * 0.5 - origin;
-            y_axis << (points3d.col(2) + points3d.col(3)) * 0.5 - origin;
-            double tmp_x_axis_norm = x_axis.norm();
-            double tmp_y_axis_norm = y_axis.norm();
-            double tmp_diff = abs(tmp_x_axis_norm - tmp_y_axis_norm);
-            double tmp_dot = x_axis.normalized().dot(y_axis.normalized());
-            if(diff > tmp_diff && dot > abs(tmp_dot)){
-                fov0 = tmp_fov0;
-                fov1 = tmp_fov1;
-                diff = tmp_diff;
-                x_axis_norm = tmp_x_axis_norm;
-                y_axis_norm = tmp_y_axis_norm;
-                double scale = 4.55 * 0.5 / tmp_x_axis_norm;
-                points3d.array() *= scale;
-                origin.array() *= scale;
-                x_axis = x_axis.normalized();
-                y_axis = y_axis.normalized();
-                z_axis = x_axis.cross(y_axis);
-                dot = abs(tmp_dot);
-                cout << "fov0: " << fov0 << "\n";
-                cout << "fov1: " << fov1 << "\n";
-                cout << "diff: " << diff << "\n";
-                cout << "x_axis_norm :" << x_axis_norm << "\n";
-                cout << "y_axis_norm :" << y_axis_norm << "\n";
-                cout << "dot: " << dot << "\n";
+            double _diff = abs(_x_axis.norm() - _y_axis.norm());
+            double _dot = _x_axis.normalized().dot(_y_axis.normalized());
+            if(min_diff > _diff && min_dot > abs(_dot)){
+                min_diff = _diff;
+                min_dot = abs(_dot);
+                cout << "min_diff: " << min_diff << "\n";
+                cout << "min_dot: " << min_dot << "\n";
+                best_fov0 = _fov0;
+                best_fov1 = _fov1;
+                cout << "best_fov0: " << best_fov0 << "\n";
+                cout << "best_fov1: " << best_fov1 << "\n";
             }
         }
     }
+    fov0 = best_fov0;
+    fov1 = best_fov1;
 }
 
 void setupTexture(GLuint texID, const char *file)
@@ -213,6 +206,7 @@ void draw_model(){
                     2.8, 2.8, -2.8, -2.8,
                     2.8, -2.8, -2.8, 2.8,
                     0.0, 0.0, 0.0, 0.0).finished());
+    obj::coordinate(camera0);
     glutSwapBuffers();
 }
 
@@ -235,7 +229,7 @@ void special_key(int key, int x, int y){
             glutPostRedisplay();
             break;
         case GLUT_KEY_UP:
-            eye_pos(2) += 2.0;
+            eye_pos(2) += 20.0;
             glutPostRedisplay();
             break;
         case GLUT_KEY_DOWN:
@@ -257,19 +251,20 @@ int main(int argc, char * argv[]) {
 #if 0
     calibration();
 #else
-    fov0 = 8.9;
-    fov1 = 7.9;
-//    fov0 = 6.6;
-//    fov1 = 6.4;
+//    fov0 = 8.9;
+//    fov1 = 7.9;
+    fov0 = 5.2;
+    fov1 = 5.0;
+#endif
     points3d = SfM(image0, image1, width, height, fov0, fov1);
     origin = Eigen::Vector3d::Zero();
     for(int i = 0; i < 8; i++){
         origin += points3d.col(i);
     }
     origin /= 8;
-    
     x_axis << (points3d.col(4) + points3d.col(5)) * 0.5 - origin;
     y_axis << (points3d.col(2) + points3d.col(3)) * 0.5 - origin;
+    
     cout << "x_axis_norm :" << x_axis.norm() << "\n";
     cout << "y_axis_norm :" << y_axis.norm() << "\n";
     double scale = 4.55 * 0.5 / y_axis.norm();
@@ -279,23 +274,23 @@ int main(int argc, char * argv[]) {
     y_axis = y_axis.normalized();
     z_axis = x_axis.cross(y_axis);
     cout << "dot: " << x_axis.dot(y_axis) << "\n";
-#endif
     
     Eigen::Matrix4d Rt;
     Rt.block(0, 0, 3, 4) << x_axis, y_axis, z_axis, origin;
     Rt.row(3) << 0, 0, 0, 1;
     cout << "Rt:\n" << Rt << "\n";
-
+    camera0 = Rt.inverse();
+    cout << "camera0:\n" << camera0 << "\n";
+    
     Eigen::MatrixXd points4d(4, points3d.cols());
     points4d.block(0, 0, 3, points3d.cols()) << points3d;
     points4d.row(3) = Eigen::RowVectorXd::Ones(points3d.cols());
-    Eigen::Matrix<double, 4, Eigen::Dynamic> points4d_world = Rt.inverse() * points4d;
+    Eigen::Matrix<double, 4, Eigen::Dynamic> points4d_world = camera0 * points4d;
     points3d_world = Eigen::MatrixXd(3, points4d_world.cols());
     points3d_world << points4d_world.topRows(3);
-    cout << "points3d_world:\n" << points3d_world << "\n";
     
-    Eigen::Vector3d pos = points3d.col(11) - origin;
-    cout << pos.dot(x_axis) << ", " << pos.dot(y_axis) << ", " << pos.dot(z_axis) << "\n";
+    for(int i = 0; i < points4d_world.cols(); i++)
+        cout << "points3d_world[" << i <<"]:" << points3d_world.col(i).transpose() << "\n";
     
     glutInit(&argc, argv);
     
