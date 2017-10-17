@@ -56,8 +56,7 @@ Eigen::Matrix<double, 3, Eigen::Dynamic> SfM(Eigen::Ref<const Eigen::MatrixXd> i
         points3d(1, i) = -points3d(1, i);
         points3d(2, i) = -points3d(2, i);
     }
-    double scale = 200.0;
-    cout << "scale: " << scale << "\n";
-    points3d.array() *=  scale;
+//    double scale = 150.0;
+//    points3d.array() *=  scale;
     return points3d;
 }

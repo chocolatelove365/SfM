@@ -90,4 +90,14 @@ namespace obj {
         Eigen::Map<Eigen::RowVectorXd> vec(vtx.data(), vtx.size());
         line_loop((GLdouble*)vec.data(), num);
     }
+    
+    void circle(double x, double y, double z, double radius, int sides){
+        Eigen::MatrixXd vtx(3, sides);
+        for(int i = 0; i < sides; i++){
+            double x = cos(i * 2 * M_PI / sides) * radius;
+            double y = sin(i * 2 * M_PI / sides) * radius;
+            vtx.col(i) = Eigen::Vector3d(x, y, z);
+        }
+        line_loop(vtx);
+    }
 }

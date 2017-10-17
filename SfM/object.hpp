@@ -10,6 +10,7 @@
 #define object_hpp
 
 #include <stdio.h>
+#include <iostream>
 #include <OpenGL/OpenGL.h>
 #include <GLUT/GLUT.h>
 #include <Eigen/Core>
@@ -23,6 +24,7 @@ namespace obj {
     void lines(Eigen::Matrix<double, 3, Eigen::Dynamic> vtx);
     void line_loop(GLdouble *vtx, int num);
     void line_loop(Eigen::Matrix<double, 3, Eigen::Dynamic> vtx);
+    void circle(double x, double y, double z, double radius, int sides);
     
 }
 #endif /* object_hpp */

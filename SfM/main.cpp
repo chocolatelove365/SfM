@@ -37,23 +37,76 @@ Eigen::Vector3d eye_pos;
 Eigen::Matrix<double, 3, Eigen::Dynamic> points3d, points3d_world;
 
 
-void load(){
+void load_json(){
     std::ifstream input_json("/Users/tomiya/Desktop/SfM/SfM/image_data.json");
     if(input_json.is_open()){
-        json json_obj;
-        input_json >> json_obj;
-        filename = json_obj["filename"];
-        width = json_obj["width"];
-        height = json_obj["height"];
-        fov0 = json_obj["fov0"];
-        fov1 = json_obj["fov1"];
-        n_points = json_obj["n_points"];
-        std::vector<double> image0_vec = json_obj["image0"];
+        json j;
+        input_json >> j;
+        filename = j["filename"];
+        width = j["width"];
+        height = j["height"];
+        fov0 = j["fov0"];
+        fov1 = j["fov1"];
+        n_points = j["n_points"];
+        std::vector<double> image0_vec = j["image0"];
         image0 = Eigen::Map<Eigen::MatrixXd>(image0_vec.data(), n_points, 2).transpose();
-        std::vector<double> image1_vec = json_obj["image1"];
+        std::vector<double> image1_vec = j["image1"];
         image1 = Eigen::Map<Eigen::MatrixXd>(image1_vec.data(), n_points, 2).transpose();
     }
     else cout << "Could not open json file\n";
+}
+
+void save_json(){
+    std::ofstream output_json("calib.json");
+    json j;
+    j["intrinsics"] = {{width, height, fov0, 0.5, 0.5, 0, 0, 0, 0},{width, height, fov1, 0.5, 0.5, 0, 0, 0, 0}};
+    j["matrix0"] = {2, 2};
+    j["transmat"] = {3, 3};
+    output_json << j;
+}
+
+void calibration(){
+    double diff = DBL_MAX;
+    double x_axis_norm = DBL_MAX;
+    double y_axis_norm = DBL_MAX;
+    double dot = DBL_MAX;
+    for(double tmp_fov0 = 5.0; tmp_fov0 < 10.0; tmp_fov0 += 0.1){
+        for(double tmp_fov1 = 5.0; tmp_fov1 < 10.0; tmp_fov1 += 0.1){
+            points3d = SfM(image0, image1, width, height, tmp_fov0, tmp_fov1);
+            origin = Eigen::Vector3d::Zero();
+            for(int i = 0; i < 8; i++){
+                origin += points3d.col(i);
+            }
+            origin /= 8;
+            
+            x_axis << (points3d.col(4) + points3d.col(5)) * 0.5 - origin;
+            y_axis << (points3d.col(2) + points3d.col(3)) * 0.5 - origin;
+            double tmp_x_axis_norm = x_axis.norm();
+            double tmp_y_axis_norm = y_axis.norm();
+            double tmp_diff = abs(tmp_x_axis_norm - tmp_y_axis_norm);
+            double tmp_dot = x_axis.normalized().dot(y_axis.normalized());
+            if(diff > tmp_diff && dot > abs(tmp_dot)){
+                fov0 = tmp_fov0;
+                fov1 = tmp_fov1;
+                diff = tmp_diff;
+                x_axis_norm = tmp_x_axis_norm;
+                y_axis_norm = tmp_y_axis_norm;
+                double scale = 4.55 * 0.5 / tmp_x_axis_norm;
+                points3d.array() *= scale;
+                origin.array() *= scale;
+                x_axis = x_axis.normalized();
+                y_axis = y_axis.normalized();
+                z_axis = x_axis.cross(y_axis);
+                dot = abs(tmp_dot);
+                cout << "fov0: " << fov0 << "\n";
+                cout << "fov1: " << fov1 << "\n";
+                cout << "diff: " << diff << "\n";
+                cout << "x_axis_norm :" << x_axis_norm << "\n";
+                cout << "y_axis_norm :" << y_axis_norm << "\n";
+                cout << "dot: " << dot << "\n";
+            }
+        }
+    }
 }
 
 void setupTexture(GLuint texID, const char *file)
@@ -155,13 +208,19 @@ void draw_model(){
                 0, 0, 0, 0, 0, 1).finished());
     obj::lines(points3d_world.leftCols(8));
     obj::line_loop(points3d_world.leftCols(8));
+    obj::circle(0.0, 0.0, 0.0, 4.55*0.5, 64);
+    obj::line_loop((Eigen::MatrixXd(3, 4) <<
+                    2.8, 2.8, -2.8, -2.8,
+                    2.8, -2.8, -2.8, 2.8,
+                    0.0, 0.0, 0.0, 0.0).finished());
     glutSwapBuffers();
 }
 
 void key(unsigned char key, int x, int y){
     switch(key){
-    case 'a':
-        cout << "a key\n";
+        case 's':
+            save_json();
+            cout << "save calib json\n";
     }
 }
 
@@ -194,8 +253,14 @@ void resize(int width, int height){
 }
 
 int main(int argc, char * argv[]) {
-    load();
-    
+    load_json();
+#if 0
+    calibration();
+#else
+    fov0 = 8.9;
+    fov1 = 7.9;
+//    fov0 = 6.6;
+//    fov1 = 6.4;
     points3d = SfM(image0, image1, width, height, fov0, fov1);
     origin = Eigen::Vector3d::Zero();
     for(int i = 0; i < 8; i++){
@@ -203,15 +268,19 @@ int main(int argc, char * argv[]) {
     }
     origin /= 8;
     
-    cout << "origin:\n" << origin << "\n";
     x_axis << (points3d.col(4) + points3d.col(5)) * 0.5 - origin;
     y_axis << (points3d.col(2) + points3d.col(3)) * 0.5 - origin;
-    cout << "x_axis norm :" << x_axis.norm() << "\n";
-    cout << "y_axis norm :" << y_axis.norm() << "\n";
+    cout << "x_axis_norm :" << x_axis.norm() << "\n";
+    cout << "y_axis_norm :" << y_axis.norm() << "\n";
+    double scale = 4.55 * 0.5 / y_axis.norm();
+    points3d.array() *= scale;
+    origin.array() *= scale;
     x_axis = x_axis.normalized();
     y_axis = y_axis.normalized();
     z_axis = x_axis.cross(y_axis);
     cout << "dot: " << x_axis.dot(y_axis) << "\n";
+#endif
+    
     Eigen::Matrix4d Rt;
     Rt.block(0, 0, 3, 4) << x_axis, y_axis, z_axis, origin;
     Rt.row(3) << 0, 0, 0, 1;
