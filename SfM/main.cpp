@@ -37,8 +37,8 @@ Eigen::Vector3d eye_pos;
 Eigen::Matrix<double, 3, Eigen::Dynamic> points3d, points3d_world;
 Eigen::Matrix4d camera0;
 
-void load_json(){
-    std::ifstream input_json("/Users/tomiya/Desktop/SfM/SfM/image_data.json");
+void load_json(const char *path){
+    std::ifstream input_json(path);
     if(input_json.is_open()){
         json j;
         input_json >> j;
@@ -71,9 +71,9 @@ void calibration(){
     double best_fov0 = 0.0;
     double best_fov1 = 0.0;
     
-    for(double _fov0 = 5.0; _fov0 < 10.0; _fov0 += 0.1){
-        for(double _fov1 = 5.0; _fov1 < 10.0; _fov1 += 0.1){
-            Eigen::Vector3d _origin, _x_axis, _y_axis, _z_axis;
+    for(double _fov0 = 2.0; _fov0 < 10.0; _fov0 += 0.1){
+        for(double _fov1 = 2.0; _fov1 < 10.0; _fov1 += 0.1){
+            Eigen::Vector3d _origin, _x_axis, _y_axis;
             Eigen::Matrix<double, 3, Eigen::Dynamic> _points3d;
             _points3d = SfM(image0, image1, width, height, _fov0, _fov1);
             _origin = Eigen::Vector3d::Zero();
@@ -83,10 +83,10 @@ void calibration(){
             _origin /= 8;
             _x_axis << (_points3d.col(4) + _points3d.col(5)) * 0.5 - _origin;
             _y_axis << (_points3d.col(2) + _points3d.col(3)) * 0.5 - _origin;
-            
             double _diff = abs(_x_axis.norm() - _y_axis.norm());
             double _dot = _x_axis.normalized().dot(_y_axis.normalized());
-            if(min_diff > _diff && min_dot > abs(_dot)){
+//            if(min_diff > _diff && min_dot > abs(_dot)){
+            if(min_diff > _diff && abs(_dot) < 0.1){
                 min_diff = _diff;
                 min_dot = abs(_dot);
                 cout << "min_diff: " << min_diff << "\n";
@@ -229,14 +229,26 @@ void special_key(int key, int x, int y){
             glutPostRedisplay();
             break;
         case GLUT_KEY_UP:
-            eye_pos(2) += 20.0;
+            eye_pos(2) += 10.0;
             glutPostRedisplay();
             break;
         case GLUT_KEY_DOWN:
-            eye_pos(2) -= 2.0;
+            eye_pos(2) -= 10.0;
             glutPostRedisplay();
             break;
     }
+}
+
+void mouse(int button, int state, int x, int y){
+    if(button == GLUT_LEFT_BUTTON && state == GLUT_DOWN){
+        cout << "x: " << x << ", y: " << y << "\n";
+        image0.conservativeResize(image0.rows(), image0.cols()+1);
+        Eigen::Vector2d pos;
+        pos << (double)x/init_width*width, (double)y/init_height*height;
+        image0.col(image0.cols()-1) = pos;
+        cout << "image0:\n" << image0 << "\n";
+    }
+    glutPostRedisplay();
 }
 
 void resize(int width, int height){
@@ -247,14 +259,17 @@ void resize(int width, int height){
 }
 
 int main(int argc, char * argv[]) {
-    load_json();
+#if 1
+    const char *path = "/Users/tomiya/Desktop/SfM/SfM/calib_1709_day12_east.json";
+#else
+    const char *path = "/Users/tomiya/Desktop/SfM/SfM/calib_1709_day12_west.json";
+#endif
+    
 #if 0
+    load_json(path);
     calibration();
 #else
-//    fov0 = 8.9;
-//    fov1 = 7.9;
-    fov0 = 5.2;
-    fov1 = 5.0;
+    load_json(path);
 #endif
     points3d = SfM(image0, image1, width, height, fov0, fov1);
     origin = Eigen::Vector3d::Zero();
@@ -300,6 +315,7 @@ int main(int argc, char * argv[]) {
     glutCreateWindow("SfM");
     glutReshapeFunc(resize);
     glutDisplayFunc(draw);
+    glutMouseFunc(mouse);
     init();
     
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH);

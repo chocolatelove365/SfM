@@ -26,14 +26,14 @@ Eigen::Matrix<double, 3, Eigen::Dynamic> SfM(Eigen::Ref<const Eigen::MatrixXd> i
     
     Eigen::Matrix3d K0;
     K0 <<
-    foc0, 0.0, 0.5 *(width - 1),
-    0.0, foc0, 0.5 *(height - 1),
+    foc0, 0.0, 0.5 * (width - 1),
+    0.0, foc0, 0.5 * (height - 1),
     0.0, 0.0, 1.0;
     
     Eigen::Matrix3d K1;
     K1 <<
-    foc1, 0.0, 0.5 *(width - 1),
-    0.0, foc1, 0.5 *(height - 1),
+    foc1, 0.0, 0.5 * (width - 1),
+    0.0, foc1, 0.5 * (height - 1),
     0.0, 0.0, 1.0;
     
     Matrix3d F = eight::fundamentalMatrix(image0, image1);
