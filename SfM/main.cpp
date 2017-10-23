@@ -36,7 +36,7 @@ cv::Mat img;
 Eigen::Vector3d origin;
 Eigen::Vector3d x_axis, y_axis, z_axis;
 Eigen::Vector3d eye_pos;
-Eigen::Matrix<double, 3, Eigen::Dynamic> points3d, points3d_world;
+Eigen::Matrix<double, 3, Eigen::Dynamic> points3d0, points3d1, points3d_world;
 Eigen::Matrix4d camera0;
 
 bool load_json(const char *path){
@@ -60,7 +60,7 @@ bool load_json(const char *path){
             return true;
         }
         else{
-            cout << "ERROR: Image vector sizes are different.";
+            cout << "ERROR: Image vector sizes are different\n";
             return false;
         }
     }
@@ -89,7 +89,8 @@ void calibration(){
         for(double _fov1 = 2.0; _fov1 < 10.0; _fov1 += 0.1){
             Eigen::Vector3d _origin, _x_axis, _y_axis;
             Eigen::Matrix<double, 3, Eigen::Dynamic> _points3d;
-            _points3d = SfM(image0, image1, width, height, _fov0, _fov1);
+            Eigen::Matrix<double, 3, 4> pose1;
+            _points3d = SfM(image0, image1, width, height, _fov0, _fov1, _points3d, pose1);
             _origin = Eigen::Vector3d::Zero();
             for(int i = 0; i < 8; i++){
                 _origin += _points3d.col(i);
@@ -99,8 +100,8 @@ void calibration(){
             _y_axis << (_points3d.col(2) + _points3d.col(3)) * 0.5 - _origin;
             double _diff = abs(_x_axis.norm() - _y_axis.norm());
             double _dot = _x_axis.normalized().dot(_y_axis.normalized());
-//            if(min_diff > _diff && min_dot > abs(_dot)){
-            if(min_diff > _diff && abs(_dot) < 0.1){
+            if(min_diff > _diff && min_dot > abs(_dot)){
+//            if(min_diff > _diff && abs(_dot) < 0.1){
                 min_diff = _diff;
                 min_dot = abs(_dot);
                 cout << "min_diff: " << min_diff << "\n";
@@ -230,7 +231,7 @@ void disp0() {
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
     draw_lines((Eigen::MatrixXd(3, 6) << origin, origin+x_axis, origin, origin+y_axis, origin, origin+z_axis).finished());
-    draw_points(points3d);
+    draw_points(points3d0);
     draw_points2d(image0);
     glutSwapBuffers();
 }
@@ -245,6 +246,7 @@ void disp1() {
     gluPerspective(fov1, (double)init_width/init_height, 0.0001, 1000.0);
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
+    draw_points(points3d1);
     draw_points2d(image1);
     glutSwapBuffers();
 }
@@ -281,19 +283,30 @@ void disp2(){
 //}
 
 void reconstruct(){
-    points3d = SfM(image0, image1, width, height, fov0, fov1);
+    Eigen::Matrix<double, 3, 4> tmp;
+    Eigen::Matrix4d pose1;
+    SfM(image0, image1, width, height, fov0, fov1, points3d0, tmp);
+    pose1.block(0, 0, 3, 4) = tmp;
+    pose1.row(3) << 0, 0, 0, 1;
+    auto points4d1 = pose1.inverse() * points3d0.colwise().homogeneous();
+    points3d1 = points4d1.colwise().hnormalized();
+    
+    cout << "pose1:\n" << pose1.inverse() << "\n";
+    for(int i = 0; i < points3d0.cols(); i++) cout << "points3d0[" << i << "]: " << points3d0.col(i).transpose() << "\n";
+    for(int i = 0; i < points3d1.cols(); i++) cout << "points3d1[" << i << "]: " << points3d1.col(i).transpose() << "\n";
+    
     origin = Eigen::Vector3d::Zero();
     for(int i = 0; i < 8; i++){
-        origin += points3d.col(i);
+        origin += points3d0.col(i);
     }
     origin /= 8;
-    x_axis << (points3d.col(4) + points3d.col(5)) * 0.5 - origin;
-    y_axis << (points3d.col(2) + points3d.col(3)) * 0.5 - origin;
+    x_axis << (points3d0.col(4) + points3d0.col(5)) * 0.5 - origin;
+    y_axis << (points3d0.col(2) + points3d0.col(3)) * 0.5 - origin;
     
     cout << "x_axis_norm :" << x_axis.norm() << "\n";
     cout << "y_axis_norm :" << y_axis.norm() << "\n";
     double scale = 4.55 * 0.5 / y_axis.norm();
-    points3d.array() *= scale;
+    points3d0.array() *= scale;
     origin.array() *= scale;
     x_axis = x_axis.normalized();
     y_axis = y_axis.normalized();
@@ -307,9 +320,7 @@ void reconstruct(){
     camera0 = Rt.inverse();
     cout << "camera0:\n" << camera0 << "\n";
     
-    Eigen::MatrixXd points4d(4, points3d.cols());
-    points4d.block(0, 0, 3, points3d.cols()) << points3d;
-    points4d.row(3) = Eigen::RowVectorXd::Ones(points3d.cols());
+    auto points4d = points3d0.colwise().homogeneous();
     Eigen::Matrix<double, 4, Eigen::Dynamic> points4d_world = camera0 * points4d;
     points3d_world = Eigen::MatrixXd(3, points4d_world.cols());
     points3d_world << points4d_world.topRows(3);

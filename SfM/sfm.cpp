@@ -20,7 +20,7 @@
 using namespace std;
 using namespace Eigen;
 
-Eigen::Matrix<double, 3, Eigen::Dynamic> SfM(Eigen::Ref<const Eigen::MatrixXd> image0, Eigen::Ref<const Eigen::MatrixXd> image1, const int width, const int height, const double fov0, const double fov1){
+Eigen::Matrix<double, 3, Eigen::Dynamic> SfM(Eigen::Ref<const Eigen::MatrixXd> image0, Eigen::Ref<const Eigen::MatrixXd> image1, const int width, const int height, const double fov0, const double fov1, Eigen::Matrix<double, 3, Eigen::Dynamic>& points3d, Eigen::Matrix<double, 3, 4>& pose1){
     const double foc0 = height * 0.5 / tan(fov0 / 360.0 * M_PI);
     const double foc1 = height * 0.5 / tan(fov1 / 360.0 * M_PI);
     
@@ -38,9 +38,11 @@ Eigen::Matrix<double, 3, Eigen::Dynamic> SfM(Eigen::Ref<const Eigen::MatrixXd> i
     
     Matrix3d F = eight::fundamentalMatrix(image0, image1);
     Matrix3d E = eight::essentialMatrix(K0, K1, F);
-    Matrix<double, 3, 4> pose1 = eight::pose(E, K0, image0, image1);
+//    Matrix<double, 3, 4> pose1 = eight::pose(E, K0, K1, image0, image1);
+    pose1 = eight::pose(E, K0, K1, image0, image1);
     
-    Eigen::Matrix<double, 3, Eigen::Dynamic> points3d = eight::structureFromTwoViews(K0, pose1, image0, image1);
+//    Eigen::Matrix<double, 3, Eigen::Dynamic> points3d = eight::structureFromTwoViews(K0, pose1, image0, image1);
+    points3d = eight::structureFromTwoViews(K0, pose1, image0, image1);
     Eigen::Matrix<double, 3, 4> pose0;
     pose0 <<
     1, 0, 0, 0,
