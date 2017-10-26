@@ -30,7 +30,8 @@ namespace eight {
         Vol. 26. Springer Science & Business Media, 2012. section 5.2.2
      
      */
-    Eigen::Matrix<double, 3, Eigen::Dynamic> structureFromTwoViews(const Eigen::Matrix<double, 3, 3> &k,
+    Eigen::Matrix<double, 3, Eigen::Dynamic> structureFromTwoViews(const Eigen::Matrix<double, 3, 3> &k0,
+                                                                   const Eigen::Matrix<double, 3, 3> &k1,
                                                                    const Eigen::Matrix<double, 3, 4> &pose1,
                                                                    Eigen::Ref<const Eigen::MatrixXd> u0,
                                                                    Eigen::Ref<const Eigen::MatrixXd> u1);

@@ -7,6 +7,7 @@
 //
 
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <Eigen/Core>
 #include <Eigen/Geometry>
@@ -24,7 +25,6 @@ using namespace std;
 std::string filename0, filename1;
 int width, height;
 double fov0, fov1;
-//int n_points;
 Eigen::MatrixXd image0, image1;
 
 const int init_width = 960;
@@ -79,14 +79,26 @@ void save_json(){
     output_json << j;
 }
 
+void save_json_model(){
+    std::ofstream output_json("model.json");
+    json j;
+    std::vector<std::vector<double>> model;
+    for(int i = 0; i < points3d_world.cols(); i++){
+        std::vector<double> point{points3d_world(0, i), points3d_world(1, i), points3d_world(2, i)};
+        model.push_back(point);
+    }
+    j["model"] = model;
+    output_json << j;
+}
+
 void calibration(){
     double min_diff = DBL_MAX;
     double min_dot = DBL_MAX;
     double best_fov0 = 0.0;
     double best_fov1 = 0.0;
     
-    for(double _fov0 = 2.0; _fov0 < 10.0; _fov0 += 0.1){
-        for(double _fov1 = 2.0; _fov1 < 10.0; _fov1 += 0.1){
+    for(double _fov0 = 9.0; _fov0 < 20.0; _fov0 += 0.1){
+        for(double _fov1 = 9.0; _fov1 < 20.0; _fov1 += 0.1){
             Eigen::Vector3d _origin, _x_axis, _y_axis;
             Eigen::Matrix<double, 3, Eigen::Dynamic> _points3d;
             Eigen::Matrix<double, 3, 4> pose1;
@@ -100,8 +112,9 @@ void calibration(){
             _y_axis << (_points3d.col(2) + _points3d.col(3)) * 0.5 - _origin;
             double _diff = abs(_x_axis.norm() - _y_axis.norm());
             double _dot = _x_axis.normalized().dot(_y_axis.normalized());
-            if(min_diff > _diff && min_dot > abs(_dot)){
+//            if(min_diff > _diff || min_dot > abs(_dot)){
 //            if(min_diff > _diff && abs(_dot) < 0.1){
+            if(_diff < 0.01 && min_dot > abs(_dot)){
                 min_diff = _diff;
                 min_dot = abs(_dot);
                 cout << "min_diff: " << min_diff << "\n";
@@ -207,11 +220,6 @@ void draw_points2d(Eigen::MatrixXd image){
 void init0(){
     glGenTextures(1, &g_texID0);
     setupTexture(g_texID0, filename0.c_str());
-//    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-//    glViewport(0, 0, init_width, init_height);
-//    glMatrixMode(GL_PROJECTION);
-//    glLoadIdentity();
-//    gluPerspective(fov0, (double)init_width/init_height, 0.0001, 1000.0);
     eye_pos << 50.0, 20.0, 0.0;
 }
 
@@ -221,7 +229,6 @@ void init1(){
 }
 
 void disp0() {
-    cout << "disp0\n";
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     drawTexture(g_texID0);
@@ -230,6 +237,13 @@ void disp0() {
     gluPerspective(fov0, (double)init_width/init_height, 0.0001, 1000.0);
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
+    const GLdouble base[] = {
+        1.0, 0.0, 0.0, 0.0,
+        0.0, -1.0, 0.0, 0.0,
+        0.0, 0.0, -1.0, 0.0,
+        0.0, 0.0, 0.0, 1.0
+    };
+    glLoadMatrixd(base);
     draw_lines((Eigen::MatrixXd(3, 6) << origin, origin+x_axis, origin, origin+y_axis, origin, origin+z_axis).finished());
     draw_points(points3d0);
     draw_points2d(image0);
@@ -237,7 +251,6 @@ void disp0() {
 }
 
 void disp1() {
-    cout << "disp1\n";
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     drawTexture(g_texID1);
@@ -246,15 +259,23 @@ void disp1() {
     gluPerspective(fov1, (double)init_width/init_height, 0.0001, 1000.0);
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
+    const GLdouble base[] = {
+        1.0, 0.0, 0.0, 0.0,
+        0.0, -1.0, 0.0, 0.0,
+        0.0, 0.0, -1.0, 0.0,
+        0.0, 0.0, 0.0, 1.0
+    };
+    glLoadMatrixd(base);
     draw_points(points3d1);
     draw_points2d(image1);
     glutSwapBuffers();
 }
 
 void disp2(){
-    cout << "disp2\n";
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    
+    // 3D
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
     gluPerspective(fov0, (double)init_width/init_height, 0.0001, 1000.0);
@@ -269,18 +290,32 @@ void disp2(){
     draw_lines(points3d_world.leftCols(8));
     draw_line_loop(points3d_world.leftCols(8));
     draw_circle(0.0, 0.0, 0.0, 4.55*0.5, 64);
+    draw_circle(0.0, 0.0, 0.0, 1.0, 64);
     draw_line_loop((Eigen::MatrixXd(3, 4) <<
                     2.8, 2.8, -2.8, -2.8,
                     2.8, -2.8, -2.8, 2.8,
                     0.0, 0.0, 0.0, 0.0).finished());
-    draw_coordinate(camera0);
+//    draw_coordinate(camera0);
+    
+    // 2D
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    glOrtho(0, width, 0, height, -1.0, 1.0);
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+    stringstream ss0, ss1;
+    ss0 << "fov0: " << fov0;
+    draw_string(0, 40, (char*)ss0.str().c_str(), GLUT_BITMAP_TIMES_ROMAN_24);
+    ss1 << "fov1: " << fov1;
+    draw_string(0, 0, (char*)ss1.str().c_str(), GLUT_BITMAP_TIMES_ROMAN_24);
+    
     glutSwapBuffers();
 }
 
-//void idle(){
-//    glutSetWindow(WinID[2]);
-//    glutPostRedisplay();
-//}
+void idle0(){
+    glutSetWindow(WinID[0]);
+    glutPostRedisplay();
+}
 
 void reconstruct(){
     Eigen::Matrix<double, 3, 4> tmp;
@@ -291,7 +326,6 @@ void reconstruct(){
     auto points4d1 = pose1.inverse() * points3d0.colwise().homogeneous();
     points3d1 = points4d1.colwise().hnormalized();
     
-    cout << "pose1:\n" << pose1.inverse() << "\n";
     for(int i = 0; i < points3d0.cols(); i++) cout << "points3d0[" << i << "]: " << points3d0.col(i).transpose() << "\n";
     for(int i = 0; i < points3d1.cols(); i++) cout << "points3d1[" << i << "]: " << points3d1.col(i).transpose() << "\n";
     
@@ -303,14 +337,37 @@ void reconstruct(){
     x_axis << (points3d0.col(4) + points3d0.col(5)) * 0.5 - origin;
     y_axis << (points3d0.col(2) + points3d0.col(3)) * 0.5 - origin;
     
-    cout << "x_axis_norm :" << x_axis.norm() << "\n";
-    cout << "y_axis_norm :" << y_axis.norm() << "\n";
-    double scale = 4.55 * 0.5 / y_axis.norm();
-    points3d0.array() *= scale;
-    origin.array() *= scale;
+#if 0
     x_axis = x_axis.normalized();
     y_axis = y_axis.normalized();
-    z_axis = x_axis.cross(y_axis);
+    z_axis = x_axis.cross(y_axis).normalized();
+    y_axis = z_axis.cross(x_axis);
+    Eigen::Matrix4d Rt;
+    Rt.block(0, 0, 3, 4) << x_axis, y_axis, z_axis, origin;
+    Rt.row(3) << 0, 0, 0, 1;
+    cout << "Rt:\n" << Rt << "\n";
+    camera0 = Rt.inverse();
+    cout << "camera0:\n" << camera0 << "\n";
+    auto points4d = points3d0.colwise().homogeneous();
+    Eigen::Matrix<double, 4, Eigen::Dynamic> points4d_world = camera0 * points4d;
+    points3d_world = Eigen::MatrixXd(3, points4d_world.cols());
+    points3d_world << points4d_world.topRows(3);
+    points3d_world *= 100.0;
+#else
+    cout << "x_axis_norm :" << x_axis.norm() << "\n";
+    cout << "y_axis_norm :" << y_axis.norm() << "\n";
+    double scale = 4.55 * 0.5 / x_axis.norm();
+    points3d0.array() *= scale;
+    origin.array() *= scale;
+//    points3d0 *= scale;
+//    origin *= scale;
+//    x_axis = x_axis.normalized();
+//    y_axis = y_axis.normalized();
+    x_axis << (points3d0.col(4) + points3d0.col(5)) * 0.5 - origin;
+    y_axis << (points3d0.col(2) + points3d0.col(3)) * 0.5 - origin;
+    z_axis = x_axis.cross(y_axis).normalized();
+//    y_axis = z_axis.cross(x_axis);
+    cout << "z_axis.norm(): " << z_axis.norm() << "\n";
     cout << "dot: " << x_axis.dot(y_axis) << "\n";
     
     Eigen::Matrix4d Rt;
@@ -322,46 +379,75 @@ void reconstruct(){
     
     auto points4d = points3d0.colwise().homogeneous();
     Eigen::Matrix<double, 4, Eigen::Dynamic> points4d_world = camera0 * points4d;
-    points3d_world = Eigen::MatrixXd(3, points4d_world.cols());
-    points3d_world << points4d_world.topRows(3);
-    
-    for(int i = 0; i < points4d_world.cols(); i++)
+    points3d_world = points4d_world.colwise().hnormalized();
+
+#endif
+    for(int i = 0; i < points3d_world.cols(); i++)
     cout << "points3d_world[" << i <<"]:" << points3d_world.col(i).transpose() << "\n";
 }
 
 void key(unsigned char key, int x, int y){
     switch(key){
         case 's':
-        cout << "save calib json\n";
-        save_json();
-        
+#if 1
+            cout << "save model json\n";
+            save_json_model();
+#else
+            cout << "save calib json\n";
+            save_json();
+#endif
+            break;
+        case 'c':
+            cout << "calibrate\n";
+            calibration();
+            glutPostRedisplay();
+            break;
         case ' ':
-        cout << "update\n";
-        reconstruct();
+            cout << "update\n";
+            reconstruct();
+            glutPostRedisplay();
+            break;
+        case 'o':
+            fov0 -= 0.1;
+            reconstruct();
+            glutPostRedisplay();
+            break;
+        case 'p':
+            fov0 += 0.1;
+            reconstruct();
+            glutPostRedisplay();
+            break;
+        case '[':
+            fov1 -= 0.1;
+            reconstruct();
+            glutPostRedisplay();
+            break;
+        case ']':
+            fov1 += 0.1;
+            reconstruct();
+            glutPostRedisplay();
+            break;
     }
 }
 
 void special_key(int key, int x, int y){
     switch(key){
         case GLUT_KEY_LEFT:
-        eye_pos(0) += 2.0;
-        glutPostRedisplay();
-        break;
-        
+            eye_pos(0) += 2.0;
+            glutPostRedisplay();
+            break;
         case GLUT_KEY_RIGHT:
-        eye_pos(0) -= 2.0;
-        glutPostRedisplay();
-        break;
-        
+            eye_pos(0) -= 2.0;
+            glutPostRedisplay();
+            break;
         case GLUT_KEY_UP:
-        eye_pos(2) += 10.0;
-        glutPostRedisplay();
-        break;
-        
+            eye_pos(2) += 10.0;
+            glutPostRedisplay();
+            break;
         case GLUT_KEY_DOWN:
-        eye_pos(2) -= 10.0;
-        glutPostRedisplay();
-        break;
+            eye_pos(2) -= 10.0;
+            glutPostRedisplay();
+            break;
     }
 }
 
@@ -420,6 +506,7 @@ int main(int argc, char * argv[]) {
     glutInitWindowPosition(0, 100);
     WinID[0] = glutCreateWindow("image0");
     glutDisplayFunc(disp0);
+//    glutIdleFunc(idle0);
     glutMouseFunc(mouse0);
     init0();
     

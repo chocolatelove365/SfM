@@ -11,6 +11,8 @@
 #include "structure.h"
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
+#include <iostream>
+using namespace std;
 
 namespace eight {
     
@@ -25,7 +27,8 @@ namespace eight {
         return h;
     }
 
-    Eigen::Matrix<double, 3, Eigen::Dynamic> structureFromTwoViews(const Eigen::Matrix<double, 3, 3> &k,
+    Eigen::Matrix<double, 3, Eigen::Dynamic> structureFromTwoViews(const Eigen::Matrix<double, 3, 3> &k0,
+                                                                   const Eigen::Matrix<double, 3, 3> &k1,
                                                                    const Eigen::Matrix<double, 3, 4> &pose1,
                                                                    Eigen::Ref<const Eigen::MatrixXd> u0,
                                                                    Eigen::Ref<const Eigen::MatrixXd> u1)
@@ -43,7 +46,8 @@ namespace eight {
         auto u0h = u0.colwise().homogeneous();
         auto u1h = u1.colwise().homogeneous();
         
-        Eigen::Matrix<double, 3, 3> kinv = k.inverse();
+        Eigen::Matrix<double, 3, 3> kinv0 = k0.inverse();
+        Eigen::Matrix<double, 3, 3> kinv1 = k1.inverse();
         
         // Note, we need the inverse pose because of the way the linear systme is build.
         // Also note that the following equations do not work on pixel coordinates but normalized image coordinates.
@@ -59,10 +63,10 @@ namespace eight {
         Eigen::Vector3d t = poseinv.block<3,1>(0, 3);
         
         for (Eigen::DenseIndex i  = 0; i < u0.cols(); ++i) {
-            Eigen::Matrix<double, 3, 3> u1hat = hat(kinv * u1h.col(i));
+            Eigen::Matrix<double, 3, 3> u1hat = hat(kinv1 * u1h.col(i));
             
             // Rotational part
-            m.block<3,1>(i*3, i) = u1hat * r * kinv * u0h.col(i);
+            m.block<3,1>(i*3, i) = u1hat * r * kinv0 * u0h.col(i);
             
             // Translational part
             m.block<3,1>(i*3, m.cols()-1) = u1hat * t;
@@ -73,7 +77,7 @@ namespace eight {
         Eigen::VectorXd x = e.eigenvectors().col(0);
         
         for (Eigen::DenseIndex i  = 0; i < u0.cols(); ++i) {
-            points.col(i) = x(i) * kinv * u0h.col(i);
+            points.col(i) = x(i) * kinv0 * u0h.col(i);
         }
         
         
