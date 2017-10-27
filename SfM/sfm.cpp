@@ -37,14 +37,9 @@ Eigen::Matrix<double, 3, Eigen::Dynamic> SfM(Eigen::Ref<const Eigen::MatrixXd> i
     Eigen::Matrix3d F = eight::fundamentalMatrix(image0, image1);
     Eigen::Matrix3d E = eight::essentialMatrix(K0, K1, F);
     pose1 = eight::pose(E, K0, K1, image0, image1);
-    cout << "pose1:\n" << pose1 << "\n";
+//    cout << "pose1:\n" << pose1 << "\n";
     points3d = eight::structureFromTwoViews(K0, K1, pose1, image0, image1);
     Eigen::Matrix<double, 3, 4> pose0 = Eigen::Matrix<double, 3, 4>::Identity();
-    
-//    for(int i = 0; i < points3d.cols(); i++){
-//        points3d(1, i) = -points3d(1, i);
-//        points3d(2, i) = -points3d(2, i);
-//    }
     
     return points3d;
 }

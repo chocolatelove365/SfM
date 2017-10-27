@@ -97,8 +97,8 @@ void calibration(){
     double best_fov0 = 0.0;
     double best_fov1 = 0.0;
     
-    for(double _fov0 = 9.0; _fov0 < 20.0; _fov0 += 0.1){
-        for(double _fov1 = 9.0; _fov1 < 20.0; _fov1 += 0.1){
+    for(double _fov0 = 5.0; _fov0 < 10.0; _fov0 += 0.1){
+        for(double _fov1 = 5.0; _fov1 < 10.0; _fov1 += 0.1){
             Eigen::Vector3d _origin, _x_axis, _y_axis;
             Eigen::Matrix<double, 3, Eigen::Dynamic> _points3d;
             Eigen::Matrix<double, 3, 4> pose1;
@@ -320,6 +320,9 @@ void idle0(){
 void reconstruct(){
     Eigen::Matrix<double, 3, 4> tmp;
     Eigen::Matrix4d pose1;
+    if(image0.cols() != image1.cols()){
+        return;
+    }
     SfM(image0, image1, width, height, fov0, fov1, points3d0, tmp);
     pose1.block(0, 0, 3, 4) = tmp;
     pose1.row(3) << 0, 0, 0, 1;
@@ -338,35 +341,13 @@ void reconstruct(){
     y_axis << (points3d0.col(2) + points3d0.col(3)) * 0.5 - origin;
     
 #if 0
+    double scale = 4.55 * 0.5 / x_axis.norm();
     x_axis = x_axis.normalized();
     y_axis = y_axis.normalized();
     z_axis = x_axis.cross(y_axis).normalized();
     y_axis = z_axis.cross(x_axis);
-    Eigen::Matrix4d Rt;
-    Rt.block(0, 0, 3, 4) << x_axis, y_axis, z_axis, origin;
-    Rt.row(3) << 0, 0, 0, 1;
-    cout << "Rt:\n" << Rt << "\n";
-    camera0 = Rt.inverse();
-    cout << "camera0:\n" << camera0 << "\n";
-    auto points4d = points3d0.colwise().homogeneous();
-    Eigen::Matrix<double, 4, Eigen::Dynamic> points4d_world = camera0 * points4d;
-    points3d_world = Eigen::MatrixXd(3, points4d_world.cols());
-    points3d_world << points4d_world.topRows(3);
-    points3d_world *= 100.0;
-#else
     cout << "x_axis_norm :" << x_axis.norm() << "\n";
     cout << "y_axis_norm :" << y_axis.norm() << "\n";
-    double scale = 4.55 * 0.5 / x_axis.norm();
-    points3d0.array() *= scale;
-    origin.array() *= scale;
-//    points3d0 *= scale;
-//    origin *= scale;
-//    x_axis = x_axis.normalized();
-//    y_axis = y_axis.normalized();
-    x_axis << (points3d0.col(4) + points3d0.col(5)) * 0.5 - origin;
-    y_axis << (points3d0.col(2) + points3d0.col(3)) * 0.5 - origin;
-    z_axis = x_axis.cross(y_axis).normalized();
-//    y_axis = z_axis.cross(x_axis);
     cout << "z_axis.norm(): " << z_axis.norm() << "\n";
     cout << "dot: " << x_axis.dot(y_axis) << "\n";
     
@@ -380,8 +361,27 @@ void reconstruct(){
     auto points4d = points3d0.colwise().homogeneous();
     Eigen::Matrix<double, 4, Eigen::Dynamic> points4d_world = camera0 * points4d;
     points3d_world = points4d_world.colwise().hnormalized();
-
+    points3d_world *= scale;
+#else
+    cout << "x_axis_norm :" << x_axis.norm() << "\n";
+    cout << "y_axis_norm :" << y_axis.norm() << "\n";
+    z_axis = x_axis.cross(y_axis).normalized() * x_axis.norm();
+    cout << "z_axis.norm(): " << z_axis.norm() << "\n";
+    cout << "dot: " << x_axis.dot(y_axis) << "\n";
+    
+    Eigen::Matrix4d Rt;
+    Rt.block(0, 0, 3, 4) << x_axis, y_axis, z_axis, origin;
+    Rt.row(3) << 0, 0, 0, 1;
+    cout << "Rt:\n" << Rt << "\n";
+    camera0 = Rt.inverse();
+    cout << "camera0:\n" << camera0 << "\n";
+    
+    auto points4d = points3d0.colwise().homogeneous();
+    Eigen::Matrix<double, 4, Eigen::Dynamic> points4d_world = camera0 * points4d;
+    points3d_world = points4d_world.colwise().hnormalized();
+    points3d_world *= 4.55 * 0.5;
 #endif
+    
     for(int i = 0; i < points3d_world.cols(); i++)
     cout << "points3d_world[" << i <<"]:" << points3d_world.col(i).transpose() << "\n";
 }
@@ -465,6 +465,9 @@ void add_point(int button, int state, int x, int y, Eigen::MatrixXd &image){
 void mouse0(int button, int state, int x, int y){
     if(button == GLUT_LEFT_BUTTON && state == GLUT_DOWN){
         add_point(button, state, x, y, image0);
+        reconstruct();
+        glutPostRedisplay();
+        glutSetWindow(WinID[2]);
         glutPostRedisplay();
     }
 }
@@ -472,6 +475,9 @@ void mouse0(int button, int state, int x, int y){
 void mouse1(int button, int state, int x, int y){
     if(button == GLUT_LEFT_BUTTON && state == GLUT_DOWN){
         add_point(button, state, x, y, image1);
+        reconstruct();
+        glutPostRedisplay();
+        glutSetWindow(WinID[2]);
         glutPostRedisplay();
     }
 }
