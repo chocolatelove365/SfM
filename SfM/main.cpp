@@ -17,7 +17,7 @@
 #include "draw.hpp"
 #include "sfm.hpp"
 
-int WinID[3];
+int WinID[2];
 
 using json = nlohmann::json;
 using namespace std;
@@ -31,6 +31,7 @@ const int init_width = 960;
 const int init_height = 540;
 
 GLuint g_texID0, g_texID1;
+GLuint current_dispID = 0;
 cv::Mat img;
 
 Eigen::Vector3d origin;
@@ -39,7 +40,7 @@ Eigen::Vector3d eye_pos;
 Eigen::Matrix<double, 3, Eigen::Dynamic> points3d0, points3d1, points3d_world;
 Eigen::Matrix4d camera0;
 
-bool load_json(const char *path){
+bool load_info_json(const char *path){
     std::ifstream input_json(path);
     if(input_json.is_open()){
         json j;
@@ -70,8 +71,29 @@ bool load_json(const char *path){
     }
 }
 
-void save_json(){
-    std::ofstream output_json("calib.json");
+bool save_info_json(const char *path){
+    std::ofstream output_json(path);
+    if(output_json.is_open()){
+        json j;
+        j["filename0"] = filename0;
+        j["filename1"] = filename1;
+        j["width"] = width;
+        j["height"] = height;
+        j["fov0"] = fov0;
+        j["fov1"] = fov1;
+        j["image0"] = {2, 2};
+        j["image1"] = {3, 3};
+        output_json << j;
+        return true;
+    }
+    else{
+        cout << "ERROR: Could not open json file\n";
+        return false;
+    }
+}
+
+void save_calib_json(const char *path){
+    std::ofstream output_json(path);
     json j;
     j["intrinsics"] = {{width, height, fov0, 0.5, 0.5, 0, 0, 0, 0},{width, height, fov1, 0.5, 0.5, 0, 0, 0, 0}};
     j["matrix0"] = {2, 2};
@@ -79,8 +101,8 @@ void save_json(){
     output_json << j;
 }
 
-void save_json_model(){
-    std::ofstream output_json("model.json");
+void save_model_json(const char *path){
+    std::ofstream output_json(path);
     json j;
     std::vector<std::vector<double>> model;
     for(int i = 0; i < points3d_world.cols(); i++){
@@ -217,24 +239,27 @@ void draw_points2d(Eigen::MatrixXd image){
     glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
 }
 
-void init0(){
+void init_image(){
     glGenTextures(1, &g_texID0);
     setupTexture(g_texID0, filename0.c_str());
+    glGenTextures(1, &g_texID1);
+    setupTexture(g_texID1, filename1.c_str());
     eye_pos << 50.0, 20.0, 0.0;
 }
 
-void init1(){
-    glGenTextures(1, &g_texID1);
-    setupTexture(g_texID1, filename1.c_str());
-}
-
-void disp0() {
+void disp_image() {
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    drawTexture(g_texID0);
+    if(current_dispID == 0)
+        drawTexture(g_texID0);
+    else
+        drawTexture(g_texID1);
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    gluPerspective(fov0, (double)init_width/init_height, 0.0001, 1000.0);
+    if(current_dispID == 0)
+        gluPerspective(fov0, (double)init_width/init_height, 0.0001, 1000.0);
+    else
+        gluPerspective(fov1, (double)init_width/init_height, 0.0001, 1000.0);
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
     const GLdouble base[] = {
@@ -244,34 +269,19 @@ void disp0() {
         0.0, 0.0, 0.0, 1.0
     };
     glLoadMatrixd(base);
-    draw_lines((Eigen::MatrixXd(3, 6) << origin, origin+x_axis, origin, origin+y_axis, origin, origin+z_axis).finished());
-    draw_points(points3d0);
-    draw_points2d(image0);
+    if(current_dispID == 0){
+        draw_lines((Eigen::MatrixXd(3, 6) << origin, origin+x_axis, origin, origin+y_axis, origin, origin+z_axis).finished());
+        draw_points(points3d0);
+        draw_points2d(image0);
+    }
+    else{
+        draw_points(points3d1);
+        draw_points2d(image1);
+    }
     glutSwapBuffers();
 }
 
-void disp1() {
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    drawTexture(g_texID1);
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    gluPerspective(fov1, (double)init_width/init_height, 0.0001, 1000.0);
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
-    const GLdouble base[] = {
-        1.0, 0.0, 0.0, 0.0,
-        0.0, -1.0, 0.0, 0.0,
-        0.0, 0.0, -1.0, 0.0,
-        0.0, 0.0, 0.0, 1.0
-    };
-    glLoadMatrixd(base);
-    draw_points(points3d1);
-    draw_points2d(image1);
-    glutSwapBuffers();
-}
-
-void disp2(){
+void disp_model(){
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     
@@ -312,7 +322,7 @@ void disp2(){
     glutSwapBuffers();
 }
 
-void idle0(){
+void idle_image(){
     glutSetWindow(WinID[0]);
     glutPostRedisplay();
 }
@@ -386,15 +396,37 @@ void reconstruct(){
     cout << "points3d_world[" << i <<"]:" << points3d_world.col(i).transpose() << "\n";
 }
 
-void key(unsigned char key, int x, int y){
+void key_image(unsigned char key, int x, int y){
+    switch(key){
+        case '[':
+            current_dispID = 0;
+            cout << "current_dispID: " << current_dispID << "\n";
+            glutSetWindow(WinID[0]);
+            glutPostRedisplay();
+            break;
+        case ']':
+            current_dispID = 1;
+            cout << "current_dispID: " << current_dispID << "\n";
+            glutSetWindow(WinID[0]);
+            glutPostRedisplay();
+            break;
+    }
+}
+
+void key_model(unsigned char key, int x, int y){
+    time_t currrent_time = std::time(nullptr);
     switch(key){
         case 's':
-#if 1
             cout << "save model json\n";
-            save_json_model();
+            save_model_json("model.json");
+            break;
+        case 'w':
+#if 1
+            cout << "save info json\n";
+            save_info_json("info_1709_day12_east_02.json");
 #else
             cout << "save calib json\n";
-            save_json();
+            save_calib_json("1709_day12_east.json");
 #endif
             break;
         case 'c':
@@ -430,7 +462,7 @@ void key(unsigned char key, int x, int y){
     }
 }
 
-void special_key(int key, int x, int y){
+void special_key_model(int key, int x, int y){
     switch(key){
         case GLUT_KEY_LEFT:
             eye_pos(0) += 2.0;
@@ -462,22 +494,16 @@ void add_point(int button, int state, int x, int y, Eigen::MatrixXd &image){
     cout << "image:\n" << image << "\n";
 }
 
-void mouse0(int button, int state, int x, int y){
+void mouse_image(int button, int state, int x, int y){
     if(button == GLUT_LEFT_BUTTON && state == GLUT_DOWN){
-        add_point(button, state, x, y, image0);
+        if(current_dispID == 0)
+            add_point(button, state, x, y, image0);
+        else
+            add_point(button, state, x, y, image1);
         reconstruct();
+        glutSetWindow(WinID[0]);
         glutPostRedisplay();
-        glutSetWindow(WinID[2]);
-        glutPostRedisplay();
-    }
-}
-
-void mouse1(int button, int state, int x, int y){
-    if(button == GLUT_LEFT_BUTTON && state == GLUT_DOWN){
-        add_point(button, state, x, y, image1);
-        reconstruct();
-        glutPostRedisplay();
-        glutSetWindow(WinID[2]);
+        glutSetWindow(WinID[1]);
         glutPostRedisplay();
     }
 }
@@ -492,16 +518,16 @@ void mouse1(int button, int state, int x, int y){
 
 int main(int argc, char * argv[]) {
 #if 1
-    const char *path = "/Users/tomiya/Desktop/SfM/SfM/calib_1709_day12_east.json";
+    const char *path = "/Users/tomiya/Desktop/SfM/SfM/info_1709_day12_east.json";
 #else
-    const char *path = "/Users/tomiya/Desktop/SfM/SfM/calib_1709_day12_west.json";
+    const char *path = "/Users/tomiya/Desktop/SfM/SfM/info_1709_day12_west.json";
 #endif
     
 #if 0
-    load_json(path);
+    load_info_json(path);
     calibration();
 #else
-    load_json(path);
+    load_info_json(path);
 #endif
     
     reconstruct();
@@ -510,29 +536,21 @@ int main(int argc, char * argv[]) {
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH);
     glutInitWindowSize(init_width, init_height);
     glutInitWindowPosition(0, 100);
-    WinID[0] = glutCreateWindow("image0");
-    glutDisplayFunc(disp0);
-//    glutIdleFunc(idle0);
-    glutMouseFunc(mouse0);
-    init0();
-    
-    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH);
-    glutInitWindowSize(init_width, init_height);
-    glutInitWindowPosition(0, 500);
-    WinID[1] = glutCreateWindow("image1");
-    glutDisplayFunc(disp1);
-    glutMouseFunc(mouse1);
-    init1();
+    WinID[0] = glutCreateWindow("image");
+    glutDisplayFunc(disp_image);
+    glutIdleFunc(idle_image);
+    glutMouseFunc(mouse_image);
+    glutKeyboardFunc(key_image);
+    init_image();
     
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH);
     glutInitWindowSize(init_width, init_height);
     glutInitWindowPosition(init_width * 2, 100);
-    WinID[2] = glutCreateWindow("3D model");
-    glutDisplayFunc(disp2);
+    WinID[1] = glutCreateWindow("model");
+    glutDisplayFunc(disp_model);
 //    glutIdleFunc(idle);
-    glutKeyboardFunc(key);
-    glutSpecialFunc(special_key);
-    
+    glutKeyboardFunc(key_model);
+    glutSpecialFunc(special_key_model);
     glutMainLoop();
     
     return 0;
