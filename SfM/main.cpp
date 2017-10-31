@@ -51,19 +51,16 @@ bool load_info_json(const char *path){
         height = j["height"];
         fov0 = j["fov0"];
         fov1 = j["fov1"];
-        std::vector<double> image0_vec = j["image0"];
-        std::vector<double> image1_vec = j["image1"];
-        int n_points = 0;
-        if(image0_vec.size() == image1_vec.size() && image0_vec.size() % 2 == 0){
-            n_points = (int)image0_vec.size() / 2;
-            image0 = Eigen::Map<Eigen::MatrixXd>(image0_vec.data(), n_points, 2).transpose();
-            image1 = Eigen::Map<Eigen::MatrixXd>(image1_vec.data(), n_points, 2).transpose();
-            return true;
+        vector<vector<vector<double>>> point_pair = j["point_pair"];
+        image0 = Eigen::MatrixXd(2,point_pair.size());
+        image1 = Eigen::MatrixXd(2,point_pair.size());
+        for(int i = 0; i < point_pair.size(); i++){
+            image0(0, i) = point_pair[i][0][0];
+            image0(1, i) = point_pair[i][0][1];
+            image1(0, i) = point_pair[i][1][0];
+            image1(1, i) = point_pair[i][1][1];
         }
-        else{
-            cout << "ERROR: Image vector sizes are different\n";
-            return false;
-        }
+        return true;
     }
     else{
         cout << "ERROR: Could not open json file\n";
@@ -356,9 +353,9 @@ void reconstruct(){
     y_axis = y_axis.normalized();
     z_axis = x_axis.cross(y_axis).normalized();
     y_axis = z_axis.cross(x_axis);
-    cout << "x_axis_norm :" << x_axis.norm() << "\n";
-    cout << "y_axis_norm :" << y_axis.norm() << "\n";
-    cout << "z_axis.norm(): " << z_axis.norm() << "\n";
+    cout << "x_axis_norm: " << x_axis.norm() << "\n";
+    cout << "y_axis_norm: " << y_axis.norm() << "\n";
+    cout << "z_axis_norm: " << z_axis.norm() << "\n";
     cout << "dot: " << x_axis.dot(y_axis) << "\n";
     
     Eigen::Matrix4d Rt;
@@ -373,10 +370,10 @@ void reconstruct(){
     points3d_world = points4d_world.colwise().hnormalized();
     points3d_world *= scale;
 #else
-    cout << "x_axis_norm :" << x_axis.norm() << "\n";
-    cout << "y_axis_norm :" << y_axis.norm() << "\n";
+    cout << "x_axis_norm: " << x_axis.norm() << "\n";
+    cout << "y_axis_norm: " << y_axis.norm() << "\n";
     z_axis = x_axis.cross(y_axis).normalized() * x_axis.norm();
-    cout << "z_axis.norm(): " << z_axis.norm() << "\n";
+    cout << "z_axis_norm: " << z_axis.norm() << "\n";
     cout << "dot: " << x_axis.dot(y_axis) << "\n";
     
     Eigen::Matrix4d Rt;
@@ -551,6 +548,7 @@ int main(int argc, char * argv[]) {
 //    glutIdleFunc(idle);
     glutKeyboardFunc(key_model);
     glutSpecialFunc(special_key_model);
+    
     glutMainLoop();
     
     return 0;
