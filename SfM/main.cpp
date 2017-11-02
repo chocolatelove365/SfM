@@ -26,9 +26,17 @@ std::string filename0, filename1;
 int width, height;
 double fov0, fov1;
 Eigen::MatrixXd image0, image1;
+Eigen::MatrixXd circle;
+double aspect;
 
-const int init_width = 960;
-const int init_height = 540;
+const int init_win_width = 960*1.5;
+const int init_win_height = 540*1.5;
+
+int cx, cy; //ドラッグ開始位置
+Eigen::Quaterniond cq = Eigen::Quaterniond::Identity();
+Eigen::Quaterniond tq;
+Eigen::MatrixXd rt;
+Eigen::Matrix4d m;
 
 GLuint g_texID0, g_texID1;
 GLuint current_dispID = 0;
@@ -49,16 +57,17 @@ bool load_info_json(const char *path){
         filename1 = j["filename1"];
         width = j["width"];
         height = j["height"];
+        aspect = (double)width / height;
         fov0 = j["fov0"];
         fov1 = j["fov1"];
-        vector<vector<vector<double>>> point_pair = j["point_pair"];
-        image0 = Eigen::MatrixXd(2,point_pair.size());
-        image1 = Eigen::MatrixXd(2,point_pair.size());
-        for(int i = 0; i < point_pair.size(); i++){
-            image0(0, i) = point_pair[i][0][0];
-            image0(1, i) = point_pair[i][0][1];
-            image1(0, i) = point_pair[i][1][0];
-            image1(1, i) = point_pair[i][1][1];
+        vector<vector<vector<double>>> point_pairs = j["point_pairs"];
+        image0 = Eigen::MatrixXd(2,point_pairs.size());
+        image1 = Eigen::MatrixXd(2,point_pairs.size());
+        for(int i = 0; i < point_pairs.size(); i++){
+            image0(0, i) = point_pairs[i][0][0];
+            image0(1, i) = point_pairs[i][0][1];
+            image1(0, i) = point_pairs[i][1][0];
+            image1(1, i) = point_pairs[i][1][1];
         }
         return true;
     }
@@ -78,8 +87,15 @@ bool save_info_json(const char *path){
         j["height"] = height;
         j["fov0"] = fov0;
         j["fov1"] = fov1;
-        j["image0"] = {2, 2};
-        j["image1"] = {3, 3};
+        int n_point_pairs = image0.cols() < image1.cols() ? (int)image0.cols():(int)image1.cols();
+        vector<vector<vector<double>>> point_pairs;
+        for(int i = 0; i < n_point_pairs; i++){
+            vector<double> point0 = {image0(0, i), image0(1, i)};
+            vector<double> point1 = {image1(0, i), image1(1, i)};
+            vector<vector<double>> point_pair = {point0, point1};
+            point_pairs.push_back(point_pair);
+        }
+        j["point_pairs"] = point_pairs;
         output_json << j;
         return true;
     }
@@ -93,8 +109,8 @@ void save_calib_json(const char *path){
     std::ofstream output_json(path);
     json j;
     j["intrinsics"] = {{width, height, fov0, 0.5, 0.5, 0, 0, 0, 0},{width, height, fov1, 0.5, 0.5, 0, 0, 0, 0}};
-    j["matrix0"] = {2, 2};
-    j["transmat"] = {3, 3};
+//    j["matrix0"] = {2, 2};
+//    j["transmat"] = {3, 3};
     output_json << j;
 }
 
@@ -107,6 +123,12 @@ void save_model_json(const char *path){
         model.push_back(point);
     }
     j["model"] = model;
+    std::vector<std::vector<double>> model_circle;
+    for(int i = 0; i < circle.cols(); i++){
+        std::vector<double> point{circle(0, i), circle(1, i), circle(2, i)};
+        model_circle.push_back(point);
+    }
+    j["model_circle"] = model_circle;
     output_json << j;
 }
 
@@ -172,12 +194,6 @@ void setupTexture(GLuint texID, const char *file)
 
 void drawTexture(GLuint texID)
 {
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    glOrtho(0, width, 0, height, -1.0, 1.0);
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
-    
     static const GLfloat vtx[] = {
         0.0, 0.0, 0.0,
         (GLfloat)width, 0.0, 0.0,
@@ -188,10 +204,10 @@ void drawTexture(GLuint texID)
     
     // テクスチャの領域指定
     static const GLfloat texuv[] = {
-        0.0f, 1.0f,
-        1.0f, 1.0f,
-        1.0f, 0.0f,
         0.0f, 0.0f,
+        1.0f, 0.0f,
+        1.0f, 1.0f,
+        0.0f, 1.0f,
     };
     glTexCoordPointer(2, GL_FLOAT, 0, texuv);
     
@@ -214,14 +230,9 @@ void draw_points2d(Eigen::MatrixXd image){
     GLdouble* vtx = (GLdouble*)vec.data();
     
     glVertexPointer(2, GL_DOUBLE, 0, vtx);
-    glPointSize(5.0f);
+    glPointSize(3.0f);
     glColor4f(0.0f, 1.0f, 0.0f, 1.0f);
     
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    glOrtho(0, width, height, 0, -1.0, 1.0);
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
     glEnableClientState(GL_VERTEX_ARRAY);
     glDrawArrays(GL_POINTS, 0, num);
     glDisableClientState(GL_VERTEX_ARRAY);
@@ -230,7 +241,7 @@ void draw_points2d(Eigen::MatrixXd image){
         glTranslated(vtx[i*2], vtx[i*2+1], 0.0);
         char text[50];
         sprintf(text, "%d", i);
-        draw_string(0, 0, text, GLUT_BITMAP_TIMES_ROMAN_24);
+        draw_string(0, 0, text, GLUT_BITMAP_HELVETICA_12);
         glPopMatrix();
     }
     glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
@@ -241,39 +252,57 @@ void init_image(){
     setupTexture(g_texID0, filename0.c_str());
     glGenTextures(1, &g_texID1);
     setupTexture(g_texID1, filename1.c_str());
-    eye_pos << 50.0, 20.0, 0.0;
+}
+
+void init_model(){
+    m <<
+    1.0, 0.0, 0.0, 0.0,
+    0.0, 1.0, 0.0, 0.0,
+    0.0, 0.0, 1.0, 30.0,
+    0.0, 0.0, 0.0, 1.0;
 }
 
 void disp_image() {
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    if(current_dispID == 0)
-        drawTexture(g_texID0);
-    else
-        drawTexture(g_texID1);
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    if(current_dispID == 0)
-        gluPerspective(fov0, (double)init_width/init_height, 0.0001, 1000.0);
-    else
-        gluPerspective(fov1, (double)init_width/init_height, 0.0001, 1000.0);
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
     const GLdouble base[] = {
         1.0, 0.0, 0.0, 0.0,
         0.0, -1.0, 0.0, 0.0,
         0.0, 0.0, -1.0, 0.0,
         0.0, 0.0, 0.0, 1.0
     };
-    glLoadMatrixd(base);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     if(current_dispID == 0){
-        draw_lines((Eigen::MatrixXd(3, 6) << origin, origin+x_axis, origin, origin+y_axis, origin, origin+z_axis).finished());
-        draw_points(points3d0);
+        glMatrixMode(GL_PROJECTION);
+        glLoadIdentity();
+        glOrtho(0, width, height, 0, -1.0, 1.0);
+        glMatrixMode(GL_MODELVIEW);
+        glLoadIdentity();
+        drawTexture(g_texID0);
         draw_points2d(image0);
+        glMatrixMode(GL_PROJECTION);
+        glLoadIdentity();
+        gluPerspective(fov0, aspect, 0.0001, 1000.0);
+        glMatrixMode(GL_MODELVIEW);
+        glLoadIdentity();
+        glLoadMatrixd(base);
+        draw_lines((Eigen::MatrixXd(3, 6) << origin, origin+x_axis, origin, origin+y_axis, origin, origin+z_axis).finished());
+        draw_points(points3d0, 4.f);
     }
     else{
-        draw_points(points3d1);
+        glMatrixMode(GL_PROJECTION);
+        glLoadIdentity();
+        glOrtho(0, width, height, 0, -1.0, 1.0);
+        glMatrixMode(GL_MODELVIEW);
+        glLoadIdentity();
+        drawTexture(g_texID1);
         draw_points2d(image1);
+        glMatrixMode(GL_PROJECTION);
+        glLoadIdentity();
+        gluPerspective(fov1, aspect, 0.0001, 1000.0);
+        glMatrixMode(GL_MODELVIEW);
+        glLoadIdentity();
+        glLoadMatrixd(base);
+        draw_points(points3d1, 4.f);
     }
     glutSwapBuffers();
 }
@@ -285,16 +314,20 @@ void disp_model(){
     // 3D
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    gluPerspective(fov0, (double)init_width/init_height, 0.0001, 1000.0);
+    gluPerspective(fov0, aspect, 0.0001, 1000.0);
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
-    gluLookAt(eye_pos(0), eye_pos(1), eye_pos(2), 0.0, 0.0, 0.0, 0.0, 0.0, 1.0);
-    draw_points(points3d_world);
+    Eigen::Matrix4d m_inv = m.inverse();
+    glMultMatrixd(m_inv.data());
+    if(rt.data() != NULL) glMultMatrixd(rt.data());
+    glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+    draw_points(points3d_world, 4.f);
     draw_lines((Eigen::MatrixXd(3, 6) <<
                 0, 1, 0, 0, 0, 0,
                 0, 0, 0, 1, 0, 0,
                 0, 0, 0, 0, 0, 1).finished());
     draw_lines(points3d_world.leftCols(8));
+    glColor4f(1.0f, 0.0f, 0.0f, 1.0f);
     draw_line_loop(points3d_world.leftCols(8));
     draw_circle(0.0, 0.0, 0.0, 4.55*0.5, 64);
     draw_circle(0.0, 0.0, 0.0, 1.0, 64);
@@ -302,7 +335,9 @@ void disp_model(){
                     2.8, 2.8, -2.8, -2.8,
                     2.8, -2.8, -2.8, 2.8,
                     0.0, 0.0, 0.0, 0.0).finished());
-//    draw_coordinate(camera0);
+    glColor4f(0.0f, 1.0f, 0.0f, 1.0f);
+    draw_points(circle, 6.f);
+    draw_line_loop2(circle);
     
     // 2D
     glMatrixMode(GL_PROJECTION);
@@ -336,8 +371,10 @@ void reconstruct(){
     auto points4d1 = pose1.inverse() * points3d0.colwise().homogeneous();
     points3d1 = points4d1.colwise().hnormalized();
     
+#if 0
     for(int i = 0; i < points3d0.cols(); i++) cout << "points3d0[" << i << "]: " << points3d0.col(i).transpose() << "\n";
     for(int i = 0; i < points3d1.cols(); i++) cout << "points3d1[" << i << "]: " << points3d1.col(i).transpose() << "\n";
+#endif
     
     origin = Eigen::Vector3d::Zero();
     for(int i = 0; i < 8; i++){
@@ -347,7 +384,7 @@ void reconstruct(){
     x_axis << (points3d0.col(4) + points3d0.col(5)) * 0.5 - origin;
     y_axis << (points3d0.col(2) + points3d0.col(3)) * 0.5 - origin;
     
-#if 0
+#if 1
     double scale = 4.55 * 0.5 / x_axis.norm();
     x_axis = x_axis.normalized();
     y_axis = y_axis.normalized();
@@ -389,21 +426,19 @@ void reconstruct(){
     points3d_world *= 4.55 * 0.5;
 #endif
     
-    for(int i = 0; i < points3d_world.cols(); i++)
-    cout << "points3d_world[" << i <<"]:" << points3d_world.col(i).transpose() << "\n";
+//    for(int i = 0; i < points3d_world.cols(); i++)
+//    cout << "points3d_world[" << i <<"]:" << points3d_world.col(i).transpose() << "\n";
 }
 
 void key_image(unsigned char key, int x, int y){
     switch(key){
         case '[':
             current_dispID = 0;
-            cout << "current_dispID: " << current_dispID << "\n";
             glutSetWindow(WinID[0]);
             glutPostRedisplay();
             break;
         case ']':
             current_dispID = 1;
-            cout << "current_dispID: " << current_dispID << "\n";
             glutSetWindow(WinID[0]);
             glutPostRedisplay();
             break;
@@ -423,7 +458,7 @@ void key_model(unsigned char key, int x, int y){
             save_info_json("info_1709_day12_east_02.json");
 #else
             cout << "save calib json\n";
-            save_calib_json("1709_day12_east.json");
+            save_calib_json("calib_1709_day12_east.json");
 #endif
             break;
         case 'c':
@@ -437,22 +472,22 @@ void key_model(unsigned char key, int x, int y){
             glutPostRedisplay();
             break;
         case 'o':
-            fov0 -= 0.1;
+            fov0 -= 0.01;
             reconstruct();
             glutPostRedisplay();
             break;
         case 'p':
-            fov0 += 0.1;
+            fov0 += 0.01;
             reconstruct();
             glutPostRedisplay();
             break;
         case '[':
-            fov1 -= 0.1;
+            fov1 -= 0.01;
             reconstruct();
             glutPostRedisplay();
             break;
         case ']':
-            fov1 += 0.1;
+            fov1 += 0.01;
             reconstruct();
             glutPostRedisplay();
             break;
@@ -460,64 +495,231 @@ void key_model(unsigned char key, int x, int y){
 }
 
 void special_key_model(int key, int x, int y){
+#if 1
     switch(key){
-        case GLUT_KEY_LEFT:
-            eye_pos(0) += 2.0;
-            glutPostRedisplay();
-            break;
-        case GLUT_KEY_RIGHT:
-            eye_pos(0) -= 2.0;
-            glutPostRedisplay();
-            break;
         case GLUT_KEY_UP:
-            eye_pos(2) += 10.0;
+            m(3, 3) += 0.05;
             glutPostRedisplay();
             break;
         case GLUT_KEY_DOWN:
-            eye_pos(2) -= 10.0;
+            m(3, 3) -= 0.05;
             glutPostRedisplay();
             break;
     }
+#else
+    double angle = 0.01 * M_PI * 2.0;
+    switch(key){
+        case GLUT_KEY_LEFT:
+        {
+            Eigen::Vector3d axis(0.0, 1.0, 0.0);
+            Eigen::Quaterniond dq(Eigen::AngleAxisd(angle, axis));
+            tq = dq * cq;
+            Eigen::Affine3d mat(tq);
+            rt = mat.matrix();
+            glutPostRedisplay();
+            cq = tq;
+            break;
+        }
+        case GLUT_KEY_RIGHT:
+        {
+            Eigen::Vector3d axis(0.0, 1.0, 0.0);
+            Eigen::Quaterniond dq(Eigen::AngleAxisd(-angle, axis));
+            tq = dq * cq;
+            Eigen::Affine3d mat(tq);
+            rt = mat.matrix();
+            glutPostRedisplay();
+            cq = tq;
+            break;
+        }
+        case GLUT_KEY_UP:
+        {
+            Eigen::Vector3d axis(1.0, 0.0, 0.0);
+            Eigen::Quaterniond dq(Eigen::AngleAxisd(angle, axis));
+            tq = dq * cq;
+            Eigen::Affine3d mat(tq);
+            rt = mat.matrix();
+            glutPostRedisplay();
+            cq = tq;
+            break;
+        }
+        case GLUT_KEY_DOWN:
+        {
+            Eigen::Vector3d axis(1.0, 0.0, 0.0);
+            Eigen::Quaterniond dq(Eigen::AngleAxisd(-angle, axis));
+            tq = dq * cq;
+            Eigen::Affine3d mat(tq);
+            rt = mat.matrix();
+            glutPostRedisplay();
+            cq = tq;
+            break;
+        }
+    }
+#endif
 }
 
-void add_point(int button, int state, int x, int y, Eigen::MatrixXd &image){
-    image.conservativeResize(image.rows(), image.cols()+1);
-    Eigen::Vector2d pos;
-    pos(0) = (double)x / init_width * width;
-    pos(1) = (double)y / init_height * height;
-    pos(0) = min(max(0, (int)pos(0)), width);
-    pos(1) = min(max(0, (int)pos(1)), height);
+void add_point(Eigen::MatrixXd &image, double x, double y, double z){
+    if(image.cols() == 0) image = Eigen::MatrixXd(3, 1);
+    else image.conservativeResize(image.rows(), image.cols()+1);
+    Eigen::Vector3d pos(x, y, z);
     image.col(image.cols()-1) = pos;
-    cout << "image:\n" << image << "\n";
+}
+
+void add_point(Eigen::MatrixXd &image, int x, int y){
+    if(image.cols() == 0) image = Eigen::MatrixXd(2, 1);
+    else image.conservativeResize(image.rows(), image.cols()+1);
+    Eigen::Vector2d pos;
+    pos(0) = min(max(0, x), width);
+    pos(1) = min(max(0, y), height);
+    image.col(image.cols()-1) = pos;
+}
+
+void remove_point(Eigen::MatrixXd &image, int point_id){
+    int numRows = (int)image.rows();
+    int numCols = (int)image.cols()-1;
+    if( point_id >= 0 && point_id < numCols ){
+        image.block(0,point_id,numRows,numCols-point_id) = image.block(0,point_id+1,numRows,numCols-point_id);
+    }
+    image.conservativeResize(numRows,numCols);
 }
 
 void mouse_image(int button, int state, int x, int y){
     if(button == GLUT_LEFT_BUTTON && state == GLUT_DOWN){
-        if(current_dispID == 0)
-            add_point(button, state, x, y, image0);
-        else
-            add_point(button, state, x, y, image1);
-        reconstruct();
-        glutSetWindow(WinID[0]);
-        glutPostRedisplay();
-        glutSetWindow(WinID[1]);
-        glutPostRedisplay();
+        GLint viewport[4];
+        glGetIntegerv(GL_VIEWPORT, viewport);
+        double view_x = viewport[0];
+        double view_y = viewport[1];
+        double view_w = viewport[2];
+        double view_h = viewport[3];
+        int px = (x-view_x)/view_w*width;
+        int py = (y-view_y)/view_h*height;
+        if(glutGetModifiers() == GLUT_ACTIVE_SHIFT){
+            double min = DBL_MAX;
+            int id = -1;
+            if(current_dispID == 0){
+                for(int i = 0; i < image0.cols(); i++){
+                    int ix = (int)image0(0, i);
+                    int iy = (int)image0(1, i);
+                    double d = sqrt((ix-px)*(ix-px)+(iy-py)*(iy-py));
+                    if(d < min){
+                        min = d;
+                        id = i;
+                    }
+                }
+            }
+            else{
+                for(int i = 0; i < image1.cols(); i++){
+                    int ix = (int)image1(0, i);
+                    int iy = (int)image1(1, i);
+                    double d = sqrt((ix-px)*(ix-px)+(iy-py)*(iy-py));
+                    if(d < min){
+                        min = d;
+                        id = i;
+                    }
+                }
+            }
+            if(min < 20.0){
+                remove_point(image0, id);
+                remove_point(image1, id);
+            }
+            reconstruct();
+            glutSetWindow(WinID[0]);
+            glutPostRedisplay();
+            glutSetWindow(WinID[1]);
+            glutPostRedisplay();
+        }
+        else{
+            double min = DBL_MAX;
+            int id = -1;
+            if(current_dispID == 0){
+                for(int i = 0; i < image0.cols(); i++){
+                    int ix = (int)image0(0, i);
+                    int iy = (int)image0(1, i);
+                    double d = sqrt((ix-px)*(ix-px)+(iy-py)*(iy-py));
+                    if(d < min){
+                        min = d;
+                        id = i;
+                    }
+                }
+            }
+            else{
+                for(int i = 0; i < image1.cols(); i++){
+                    int ix = (int)image1(0, i);
+                    int iy = (int)image1(1, i);
+                    double d = sqrt((ix-px)*(ix-px)+(iy-py)*(iy-py));
+                    if(d < min){
+                        min = d;
+                        id = i;
+                    }
+                }
+            }
+            if(min < 20.0){
+                add_point(circle, points3d_world(0, id), points3d_world(1, id), points3d_world(2, id));
+            }
+            glutSetWindow(WinID[0]);
+            glutPostRedisplay();
+            glutSetWindow(WinID[1]);
+            glutPostRedisplay();
+        }
+//        else{
+//            if(current_dispID == 0){
+//                add_point(image0, px, py);
+//            }
+//            else{
+//                add_point(image1, px, py);
+//            }
+//            reconstruct();
+//            glutSetWindow(WinID[0]);
+//            glutPostRedisplay();
+//            glutSetWindow(WinID[1]);
+//            glutPostRedisplay();
+//        }
     }
 }
 
-//void resize(int width, int height){
-//    glViewport(0, 0, width, height);
-//    glMatrixMode(GL_PROJECTION);
-//    glLoadIdentity();
-//    gluPerspective(fov0, (double)width/height, 0.0001, 1000.0);
-//}
+void mouse_model(int button, int state, int x, int y){
+    if(button == GLUT_LEFT_BUTTON){
+        if(state == GLUT_DOWN){
+            cx = x;
+            cy = y;
+        }
+        else if(state == GLUT_UP){
+            cq = tq;
+        }
+    }
+}
 
+void motion_model(int x, int y){
+    double dx, dy, a;
+    int wh = glutGet(GLUT_WINDOW_HEIGHT);
+    dx = (double)(x - cx) / wh;
+    dy = (double)(y - cy) / wh;
+    a = sqrt(dx * dx + dy * dy);
+    if(a != 0){
+        double angle = a * M_PI;
+        Eigen::Vector3d axis(dy/a, dx/a, 0.0);
+        Eigen::Quaterniond dq(Eigen::AngleAxisd(angle, axis));
+        tq = dq * cq;
+        Eigen::Affine3d mat(tq);
+        rt = mat.matrix();
+    }
+    glutPostRedisplay();
+}
+
+void resize_image(int w, int h){
+    if((double)w/h < aspect)
+        glViewport(0, (h-w/aspect)*0.5, w, w/aspect);
+    else
+        glViewport((w-h*aspect)*0.5, 0, h*aspect, h);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    gluPerspective(fov0, aspect, 0.0001, 1000.0);
+}
 
 int main(int argc, char * argv[]) {
 #if 1
-    const char *path = "/Users/tomiya/Desktop/SfM/SfM/info_1709_day12_east.json";
+    const char *path = "info_1709_day12_east_02.json";
 #else
-    const char *path = "/Users/tomiya/Desktop/SfM/SfM/info_1709_day12_west.json";
+    const char *path = "info_1709_day12_west.json";
 #endif
     
 #if 0
@@ -531,23 +733,29 @@ int main(int argc, char * argv[]) {
     glutInit(&argc, argv);
     
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH);
-    glutInitWindowSize(init_width, init_height);
+    glutInitWindowSize(init_win_width, init_win_height);
     glutInitWindowPosition(0, 100);
     WinID[0] = glutCreateWindow("image");
     glutDisplayFunc(disp_image);
+    glutReshapeFunc(resize_image);
     glutIdleFunc(idle_image);
     glutMouseFunc(mouse_image);
     glutKeyboardFunc(key_image);
     init_image();
     
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH);
-    glutInitWindowSize(init_width, init_height);
-    glutInitWindowPosition(init_width * 2, 100);
+    glutInitWindowSize(init_win_width, init_win_height);
+    glutInitWindowPosition(init_win_width * 2, 100);
     WinID[1] = glutCreateWindow("model");
     glutDisplayFunc(disp_model);
-//    glutIdleFunc(idle);
+#if 0
+    glutIdleFunc(idle);
+#endif
+    glutMouseFunc(mouse_model);
+    glutMotionFunc(motion_model);
     glutKeyboardFunc(key_model);
     glutSpecialFunc(special_key_model);
+    init_model();
     
     glutMainLoop();
     
